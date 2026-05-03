@@ -1,5 +1,7 @@
 # ParkReserve AI
 
+[![CI](https://github.com/srs312-lab/parkreserve-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/srs312-lab/parkreserve-ai/actions/workflows/ci.yml)
+
 Autonomous campground reservation monitoring for U.S. national parks and Recreation.gov facilities.
 
 ParkReserve AI lets a user search parks and campgrounds, create one or many reservation watches, continuously poll real Recreation.gov availability, and send email/SMS alerts when matching openings appear. It is built as a portfolio-ready agent system with a FastAPI backend, a Next.js dashboard, Postgres persistence, scheduled background checks, and notification integrations.
