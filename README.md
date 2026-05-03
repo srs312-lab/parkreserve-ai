@@ -27,28 +27,19 @@ The current product scope focuses on Recreation.gov campground inventory. The ar
 - Send email, SMS, or both through SMTP and Twilio.
 - Persist watches, alerts, and dedupe keys in Postgres.
 
-## Screenshots To Capture
+## Screenshots
 
-For the portfolio README, add screenshots after running the app locally:
+### Dashboard
 
-- Dashboard with grouped Yosemite watches.
-- Batch campground creation flow with Upper Pines, Lower Pines, and North Pines selected.
-- System status panel showing Postgres, scheduler interval, and alert integrations.
-- Alert history or next-available results after a manual check.
+![ParkReserve AI dashboard with grouped Yosemite watches](docs/screenshots/dashboard.png)
 
-Suggested location:
+### Batch Watch Creation
 
-```text
-docs/screenshots/dashboard.png
-docs/screenshots/batch-create.png
-docs/screenshots/status-panel.png
-```
+![Batch campground search and watch creation flow](docs/screenshots/batch-create.png)
 
-Then embed them here:
+### Next Available Dates
 
-```md
-![ParkReserve AI dashboard](docs/screenshots/dashboard.png)
-```
+![Next available date results for grouped campground watches](docs/screenshots/next-available.png)
 
 ## Architecture
 
