@@ -6,6 +6,12 @@ class Settings(BaseSettings):
     environment: str = "development"
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/parkreserve"
     redis_url: str = "redis://localhost:6379/0"
+    cors_origins: str = (
+        "http://localhost:3000,"
+        "http://127.0.0.1:3000,"
+        "http://localhost:3001,"
+        "http://127.0.0.1:3001"
+    )
     poll_interval_seconds: int = 300
     recreation_gov_base_url: str = "https://www.recreation.gov"
     ridb_base_url: str = "https://ridb.recreation.gov/api/v1"

@@ -104,6 +104,9 @@ frontend/
   dashboard/
 config/
   example.env
+  production.env.example
+.github/
+  workflows/
 ```
 
 ## Quickstart
@@ -157,6 +160,12 @@ DATABASE_URL=postgresql+psycopg://postgres:your_password@localhost:5432/postgres
 DATABASE_URL=postgresql+psycopg://postgres:your_password@localhost:5432/parkreserve
 ```
 
+Allowed frontend origins:
+
+```text
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001
+```
+
 Background polling:
 
 ```text
@@ -190,6 +199,60 @@ Optional Recreation Information Database search:
 ```text
 RIDB_API_KEY=your_ridb_api_key
 ```
+
+## Deployment
+
+The repo includes deployment-ready config for a Vercel dashboard and Railway FastAPI backend.
+
+### Backend On Railway
+
+Railway uses [railway.json](railway.json) with [backend/Dockerfile](backend/Dockerfile). Add a Railway Postgres database, then set backend environment variables from [config/production.env.example](config/production.env.example).
+
+Required production values:
+
+```text
+ENVIRONMENT=production
+DATABASE_URL=postgresql+psycopg://...
+CORS_ORIGINS=https://your-parkreserve-dashboard.vercel.app
+POLL_INTERVAL_SECONDS=300
+```
+
+Optional alert/search integrations:
+
+```text
+RIDB_API_KEY=...
+DEFAULT_ALERT_EMAIL=...
+DEFAULT_ALERT_PHONE=...
+SMTP_HOST=...
+SMTP_USERNAME=...
+SMTP_PASSWORD=...
+SMTP_FROM_EMAIL=...
+TWILIO_ACCOUNT_SID=...
+TWILIO_AUTH_TOKEN=...
+TWILIO_FROM_PHONE=...
+```
+
+The backend health check is:
+
+```text
+GET /health
+```
+
+### Frontend On Vercel
+
+Create a Vercel project with root directory:
+
+```text
+frontend/dashboard
+```
+
+The dashboard includes [frontend/dashboard/vercel.json](frontend/dashboard/vercel.json). Set this Vercel environment variable:
+
+```text
+NEXT_PUBLIC_API_BASE_URL=https://your-parkreserve-api.up.railway.app
+```
+
+After Vercel gives you the dashboard URL, add that exact URL to the backend `CORS_ORIGINS` value and redeploy the backend.
 
 ## Demo Flow
 
@@ -293,7 +356,7 @@ This prevents repeated notifications for the same campsite opening while still a
 - Add fallback recommendations across nearby parks and campgrounds.
 - Add permit and timed-entry inventory sources.
 - Add alert analytics and watch success metrics.
-- Add production deployment scripts for Railway/Vercel.
+- Deploy a public demo environment.
 
 ## Resume Bullet
 
