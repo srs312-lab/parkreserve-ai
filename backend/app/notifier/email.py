@@ -24,12 +24,13 @@ class EmailNotifier:
         return await self._send_resend(alert, to_email)
 
     async def _send_resend(self, alert: Alert, to_email: str) -> tuple[str, str]:
-        if not settings.resend_api_key or not settings.resend_from_email:
+        from_email = self._clean_email_header_value(settings.resend_from_email)
+        if not settings.resend_api_key or not from_email:
             print(f"Email alert preview for {to_email}: {alert.message}")
             return "not_configured", "Resend API key or from email is missing."
 
         payload = {
-            "from": settings.resend_from_email,
+            "from": from_email,
             "to": [to_email],
             "subject": f"ParkReserve AI alert: {alert.park_name}",
             "text": self._text_body(alert),
@@ -56,6 +57,17 @@ class EmailNotifier:
             return "failed", f"Resend request failed: {exc.__class__.__name__}"
 
         return "sent", "Email sent."
+
+    @staticmethod
+    def _clean_email_header_value(value: Optional[str]) -> Optional[str]:
+        if not value:
+            return None
+
+        cleaned = value.strip()
+        if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in {"'", '"'}:
+            cleaned = cleaned[1:-1].strip()
+
+        return cleaned or None
 
     def _send_smtp(self, alert: Alert, to_email: str) -> tuple[str, str]:
         required_settings = [
