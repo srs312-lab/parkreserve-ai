@@ -17,10 +17,24 @@ import {
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-const API_BASE_URL =
+const LOCAL_API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+const DEPLOYED_API_PROXY_BASE_URL = "/api/backend";
 const AUTO_REFRESH_INTERVAL_MS = 30_000;
 const REFRESH_COUNTDOWN_INTERVAL_MS = 1_000;
+
+function getApiBaseUrl() {
+  if (typeof window === "undefined") {
+    return LOCAL_API_BASE_URL;
+  }
+
+  const localHosts = new Set(["localhost", "127.0.0.1", "::1"]);
+  if (localHosts.has(window.location.hostname)) {
+    return LOCAL_API_BASE_URL;
+  }
+
+  return DEPLOYED_API_PROXY_BASE_URL;
+}
 
 type WatchPriority = "high" | "normal" | "low";
 type TestAlertChannel = "email" | "sms" | "both";
@@ -341,7 +355,13 @@ export default function Dashboard() {
     path: string,
     init?: RequestInit,
   ): Promise<T> {
-    const response = await fetch(`${API_BASE_URL}${path}`, init);
+    const requestUrl = `${getApiBaseUrl()}${path}`;
+    let response: Response;
+    try {
+      response = await fetch(requestUrl, init);
+    } catch {
+      throw new Error(`Could not reach backend at ${requestUrl}.`);
+    }
     if (!response.ok) {
       const message = await response.text();
       throw new Error(parseApiError(message) || response.statusText);
