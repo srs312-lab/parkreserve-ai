@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 NotificationType = Literal["email", "sms", "both", "push"]
 WatchStatus = Literal["active", "paused"]
 NotificationStatus = Literal["sent", "not_configured", "failed"]
+WatchPriority = Literal["high", "normal", "low"]
 
 
 class WatchReservationRequest(BaseModel):
@@ -27,6 +28,13 @@ class WatchReservationRequest(BaseModel):
     )
     flexibility_days: int = Field(0, ge=0, le=30)
     notification_type: NotificationType = "email"
+    priority: WatchPriority = Field(
+        "normal",
+        description=(
+            "Controls background availability check frequency. "
+            "High checks faster, low checks slower."
+        ),
+    )
     email_address: Optional[str] = Field(None, examples=["you@example.com"])
     phone_number: Optional[str] = Field(None, examples=["+15551234567"])
     max_price: Optional[float] = Field(None, ge=0)
@@ -53,6 +61,7 @@ class UserPreferences(BaseModel):
     min_nights: int = 1
     flexibility_days: int
     notification_type: NotificationType
+    priority: WatchPriority = "normal"
     email_address: Optional[str] = None
     phone_number: Optional[str] = None
     max_price: Optional[float] = None
@@ -139,6 +148,7 @@ class DuplicateWatchResponse(BaseModel):
     camp_type: str
     min_nights: int
     notification_type: NotificationType
+    priority: WatchPriority
     message: str
 
 
@@ -178,6 +188,7 @@ class WatchUpdateRequest(BaseModel):
     camp_type: Optional[str] = Field(None, examples=["any", "tent", "rv"])
     min_nights: Optional[int] = Field(None, ge=1, le=30)
     notification_type: Optional[NotificationType] = None
+    priority: Optional[WatchPriority] = None
 
 
 class WatchSummary(BaseModel):
@@ -191,6 +202,8 @@ class WatchSummary(BaseModel):
     camp_type: str
     min_nights: int = 1
     notification_type: NotificationType
+    priority: WatchPriority = "normal"
+    check_interval_seconds: int
     last_checked_at: Optional[datetime] = None
 
 

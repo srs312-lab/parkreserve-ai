@@ -35,7 +35,11 @@ def on_startup() -> None:
             from app.api.routes import agent
             from app.scheduler.jobs import schedule_watch_job
 
-            schedule_watch_job(watch.watch_id, agent.check_watch)
+            schedule_watch_job(
+                watch.watch_id,
+                agent.check_watch,
+                watch.preferences.priority,
+            )
 
 
 @app.on_event("shutdown")

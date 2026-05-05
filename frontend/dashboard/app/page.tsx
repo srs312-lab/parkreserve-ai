@@ -22,6 +22,8 @@ const API_BASE_URL =
 const AUTO_REFRESH_INTERVAL_MS = 30_000;
 const REFRESH_COUNTDOWN_INTERVAL_MS = 1_000;
 
+type WatchPriority = "high" | "normal" | "low";
+
 type Watch = {
   watch_id: string;
   status: "active" | "paused";
@@ -33,6 +35,8 @@ type Watch = {
   camp_type: string;
   min_nights: number;
   notification_type: "email" | "sms" | "both" | "push";
+  priority: WatchPriority;
+  check_interval_seconds: number;
   last_checked_at: string | null;
 };
 
@@ -121,6 +125,7 @@ type WatchEditDraft = {
   camp_type: string;
   min_nights: number;
   notification_type: Watch["notification_type"];
+  priority: WatchPriority;
 };
 
 type WatchGroup = {
@@ -131,6 +136,8 @@ type WatchGroup = {
   campType: string;
   minNights: number;
   notificationType: Watch["notification_type"];
+  priority: WatchPriority;
+  checkIntervalSeconds: number;
   watches: Watch[];
   activeCount: number;
   pausedCount: number;
@@ -175,6 +182,7 @@ export default function Dashboard() {
   const [campType, setCampType] = useState("any");
   const [minNights, setMinNights] = useState(1);
   const [notificationType, setNotificationType] = useState("both");
+  const [watchPriority, setWatchPriority] = useState<WatchPriority>("normal");
   const [busy, setBusy] = useState(false);
   const [testAlertBusy, setTestAlertBusy] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
@@ -246,7 +254,8 @@ export default function Dashboard() {
         left.date_end.localeCompare(right.date_end) ||
         left.camp_type.localeCompare(right.camp_type) ||
         left.min_nights - right.min_nights ||
-        left.notification_type.localeCompare(right.notification_type);
+        left.notification_type.localeCompare(right.notification_type) ||
+        prioritySortRank(left.priority) - prioritySortRank(right.priority);
 
       return (
         groupOrder ||
@@ -264,6 +273,7 @@ export default function Dashboard() {
         watch.camp_type,
         watch.min_nights,
         watch.notification_type,
+        watch.priority,
       ].join("|");
       const group =
         groups.get(key) ??
@@ -275,6 +285,8 @@ export default function Dashboard() {
           campType: watch.camp_type,
           minNights: watch.min_nights,
           notificationType: watch.notification_type,
+          priority: watch.priority,
+          checkIntervalSeconds: watch.check_interval_seconds,
           watches: [],
         };
 
@@ -341,7 +353,14 @@ export default function Dashboard() {
       fetchJson<SchedulerJob[]>("/scheduler/jobs"),
       fetchJson<SettingsStatus>("/settings/status"),
     ]);
-    setWatches(watchData);
+    setWatches(
+      watchData.map((watch) => ({
+        ...watch,
+        priority: watch.priority ?? "normal",
+        check_interval_seconds:
+          watch.check_interval_seconds ?? settingsData.poll_interval_seconds,
+      })),
+    );
     setAlerts(alertData);
     setJobs(jobData);
     setSettingsStatus(settingsData);
@@ -429,6 +448,7 @@ export default function Dashboard() {
               min_nights: minNights,
               flexibility_days: 0,
               notification_type: notificationType,
+              priority: watchPriority,
             })),
           }),
         },
@@ -664,6 +684,7 @@ export default function Dashboard() {
       camp_type: watch.camp_type,
       min_nights: watch.min_nights,
       notification_type: watch.notification_type,
+      priority: watch.priority,
     });
   }
 
@@ -865,9 +886,9 @@ export default function Dashboard() {
           />
           <StatusItem
             detail={settingsStatus ? `${settingsStatus.poll_interval_seconds}s` : undefined}
-            label="Polling"
+            label="Base check"
             ok={Boolean(settingsStatus)}
-            value="backend"
+            value="normal priority"
           />
           <StatusItem
             detail={`${AUTO_REFRESH_INTERVAL_MS / 1000}s`}
@@ -1037,6 +1058,19 @@ export default function Dashboard() {
                 <option value="sms">SMS</option>
               </select>
             </label>
+            <label>
+              Priority
+              <select
+                value={watchPriority}
+                onChange={(event) =>
+                  setWatchPriority(event.target.value as WatchPriority)
+                }
+              >
+                <option value="high">High · 30s</option>
+                <option value="normal">Normal · 60s</option>
+                <option value="low">Low · 5m</option>
+              </select>
+            </label>
           </div>
         </form>
 
@@ -1055,7 +1089,9 @@ export default function Dashboard() {
                       {group.dateStart} to {group.dateEnd} · {group.minNights}+ night
                       {group.minNights === 1 ? "" : "s"} ·{" "}
                       {formatCampType(group.campType)} ·{" "}
-                      {formatNotificationType(group.notificationType)}
+                      {formatNotificationType(group.notificationType)} ·{" "}
+                      {formatPriority(group.priority)} priority · every{" "}
+                      {formatDuration(group.checkIntervalSeconds)}
                     </p>
                   </div>
                   <div className="groupTools">
@@ -1162,6 +1198,10 @@ export default function Dashboard() {
                             {watch.facility_id ? (
                               <span>Facility {watch.facility_id}</span>
                             ) : null}
+                            <span>
+                              {formatPriority(watch.priority)} priority · every{" "}
+                              {formatDuration(watch.check_interval_seconds)}
+                            </span>
                             <span>
                               {watch.last_checked_at
                                 ? `Last availability check ${formatDateTime(
@@ -1312,6 +1352,22 @@ export default function Dashboard() {
                               <option value="both">Email and SMS</option>
                               <option value="email">Email</option>
                               <option value="sms">SMS</option>
+                            </select>
+                          </label>
+                          <label>
+                            Priority
+                            <select
+                              value={editDraft.priority}
+                              onChange={(event) =>
+                                setEditDraft({
+                                  ...editDraft,
+                                  priority: event.target.value as WatchPriority,
+                                })
+                              }
+                            >
+                              <option value="high">High · 30s</option>
+                              <option value="normal">Normal · 60s</option>
+                              <option value="low">Low · 5m</option>
                             </select>
                           </label>
                           <div className="editActions">
@@ -1493,6 +1549,14 @@ export default function Dashboard() {
                     : deleteTarget.group.notificationType,
                 )}
               </span>
+              <span>
+                {formatPriority(
+                  deleteTarget.type === "watch"
+                    ? deleteTarget.watch.priority
+                    : deleteTarget.group.priority,
+                )}{" "}
+                priority
+              </span>
             </div>
             {deleteTarget.type === "group" ? (
               <div className="confirmList">
@@ -1577,6 +1641,34 @@ function formatNotificationType(notificationType: Watch["notification_type"]) {
     return "email and SMS";
   }
   return notificationType;
+}
+
+function formatPriority(priority: WatchPriority) {
+  if (priority === "high") {
+    return "High";
+  }
+  if (priority === "low") {
+    return "Low";
+  }
+  return "Normal";
+}
+
+function formatDuration(seconds: number) {
+  if (seconds >= 120 && seconds % 60 === 0) {
+    const minutes = seconds / 60;
+    return `${minutes}m`;
+  }
+  return `${seconds}s`;
+}
+
+function prioritySortRank(priority: WatchPriority) {
+  if (priority === "high") {
+    return 0;
+  }
+  if (priority === "normal") {
+    return 1;
+  }
+  return 2;
 }
 
 function formatDateTime(value: string | null | undefined) {

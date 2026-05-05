@@ -14,6 +14,7 @@ class PreferenceAgent:
             min_nights=request.min_nights,
             flexibility_days=request.flexibility_days,
             notification_type=request.notification_type,
+            priority=request.priority,
             email_address=request.email_address or settings.default_alert_email,
             phone_number=request.phone_number or settings.default_alert_phone,
             max_price=request.max_price,

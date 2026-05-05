@@ -169,10 +169,10 @@ CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,h
 Background polling:
 
 ```text
-POLL_INTERVAL_SECONDS=300
+POLL_INTERVAL_SECONDS=60
 ```
 
-For demos, you can temporarily set a shorter interval such as `30`. The dashboard auto-refresh interval is currently configured in `frontend/dashboard/app/page.tsx`.
+This is the normal-priority availability check interval. High-priority watches check every 30 seconds, normal-priority watches check every 60 seconds, and low-priority watches check every 5 minutes. The dashboard auto-refresh interval is separate and currently configured in `frontend/dashboard/app/page.tsx`.
 
 Email alerts:
 
@@ -214,7 +214,7 @@ Required production values:
 ENVIRONMENT=production
 DATABASE_URL=postgresql+psycopg://...
 CORS_ORIGINS=https://your-parkreserve-dashboard.vercel.app
-POLL_INTERVAL_SECONDS=300
+POLL_INTERVAL_SECONDS=60
 ```
 
 Optional alert/search integrations:
@@ -264,11 +264,12 @@ For a portfolio recording or live walkthrough, use the full script in [docs/demo
 4. Select Upper Pines, Lower Pines, and North Pines.
 5. Use a future date window, for example `2026-05-10` to `2026-05-13`.
 6. Set `min_nights` to `1` or `2` depending on whether shorter openings should trigger alerts.
-7. Choose `both` for email and SMS.
-8. Create the batch watch.
-9. Use group-level check now to trigger an immediate Recreation.gov lookup.
-10. Open next-available dates to show fallback inventory discovery.
-11. Pause, resume, edit, or delete a group to demonstrate operational controls.
+7. Choose `high`, `normal`, or `low` priority depending on how aggressively the watch should poll.
+8. Choose `both` for email and SMS.
+9. Create the batch watch.
+10. Use group-level check now to trigger an immediate Recreation.gov lookup.
+11. Open next-available dates to show fallback inventory discovery.
+12. Pause, resume, edit, or delete a group to demonstrate operational controls.
 
 ## API Reference
 
@@ -280,7 +281,7 @@ For a portfolio recording or live walkthrough, use the full script in [docs/demo
 | `GET` | `/parks/search` | Search supported park names for autocomplete. |
 | `GET` | `/campgrounds/search` | Search campground facilities and IDs. |
 | `GET` | `/watches` | List active and paused watches. |
-| `PATCH` | `/watches/{watch_id}` | Edit dates, site type, minimum nights, or alert channel. |
+| `PATCH` | `/watches/{watch_id}` | Edit dates, site type, minimum nights, alert channel, or priority. |
 | `DELETE` | `/watches/{watch_id}` | Delete a watch and its alert history. |
 | `POST` | `/pause-agent` | Pause a watch and unschedule its job. |
 | `POST` | `/resume-agent` | Resume a watch and reschedule polling. |
@@ -320,7 +321,8 @@ curl -X POST "http://127.0.0.1:8000/watch-reservation" \
     "camp_type": "any",
     "min_nights": 1,
     "flexibility_days": 0,
-    "notification_type": "both"
+    "notification_type": "both",
+    "priority": "high"
   }'
 ```
 

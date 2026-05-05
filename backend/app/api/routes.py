@@ -11,7 +11,12 @@ from app.reservation_checker.campground_catalog import (
     find_campgrounds,
     lookup_campground_name,
 )
-from app.scheduler.jobs import list_scheduler_jobs, pause_watch_job, schedule_watch_job
+from app.scheduler.jobs import (
+    list_scheduler_jobs,
+    pause_watch_job,
+    schedule_watch_job,
+    watch_check_interval_seconds,
+)
 from app.schemas.reservations import (
     Alert,
     AvailabilityQuery,
@@ -55,7 +60,11 @@ async def watch_reservation(
         )
 
     watch = await agent.create_watch(request)
-    schedule_watch_job(watch.watch_id, agent.check_watch)
+    schedule_watch_job(
+        watch.watch_id,
+        agent.check_watch,
+        watch.preferences.priority,
+    )
     return WatchReservationResponse(
         watch_id=watch.watch_id,
         status=watch.status,
@@ -83,7 +92,11 @@ async def watch_reservations_batch(
             continue
 
         watch = await agent.create_watch(watch_request)
-        schedule_watch_job(watch.watch_id, agent.check_watch)
+        schedule_watch_job(
+            watch.watch_id,
+            agent.check_watch,
+            watch.preferences.priority,
+        )
         created.append(
             WatchReservationResponse(
                 watch_id=watch.watch_id,
@@ -168,6 +181,7 @@ async def send_test_alert(request: TestAlertRequest) -> TestAlertResponse:
             min_nights=1,
             flexibility_days=0,
             notification_type=request.notification_type,
+            priority="normal",
             email_address=settings.default_alert_email,
             phone_number=settings.default_alert_phone,
         ),
@@ -217,7 +231,11 @@ def resume_agent(request: PauseAgentRequest) -> dict[str, str]:
         raise HTTPException(status_code=404, detail="Watch not found.")
 
     store.resume_watch(request.watch_id)
-    schedule_watch_job(request.watch_id, agent.check_watch)
+    schedule_watch_job(
+        request.watch_id,
+        agent.check_watch,
+        watch.preferences.priority,
+    )
     return {"watch_id": request.watch_id, "status": "active"}
 
 
@@ -254,7 +272,11 @@ def update_watch(watch_id: str, request: WatchUpdateRequest) -> WatchSummary:
     updated_watch = store.update_watch(watch_id, updated_preferences)
 
     if updated_watch.status == "active":
-        schedule_watch_job(watch_id, agent.check_watch)
+        schedule_watch_job(
+            watch_id,
+            agent.check_watch,
+            updated_watch.preferences.priority,
+        )
 
     return _watch_summary(updated_watch)
 
@@ -280,6 +302,10 @@ def _watch_summary(watch) -> WatchSummary:
         camp_type=watch.preferences.camp_type,
         min_nights=watch.preferences.min_nights,
         notification_type=watch.preferences.notification_type,
+        priority=watch.preferences.priority,
+        check_interval_seconds=watch_check_interval_seconds(
+            watch.preferences.priority
+        ),
         last_checked_at=watch.last_checked_at,
     )
 
@@ -328,6 +354,7 @@ def _duplicate_watch_response(
         camp_type=preferences.camp_type,
         min_nights=preferences.min_nights,
         notification_type=preferences.notification_type,
+        priority=preferences.priority,
         message="Duplicate watch skipped.",
     )
 
