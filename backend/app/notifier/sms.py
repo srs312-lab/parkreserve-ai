@@ -37,7 +37,16 @@ class SmsNotifier:
                     auth=(settings.twilio_account_sid, settings.twilio_auth_token),
                 )
                 response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            return "failed", f"Twilio returned HTTP {exc.response.status_code}."
         except Exception as exc:
             return "failed", str(exc)
 
-        return "sent", f"SMS sent to {to_phone}."
+        return "sent", f"SMS sent to {_mask_phone(to_phone)}."
+
+
+def _mask_phone(phone_number: str) -> str:
+    digits = "".join(character for character in phone_number if character.isdigit())
+    if len(digits) < 4:
+        return "configured number"
+    return f"***-***-{digits[-4:]}"

@@ -23,6 +23,7 @@ const AUTO_REFRESH_INTERVAL_MS = 30_000;
 const REFRESH_COUNTDOWN_INTERVAL_MS = 1_000;
 
 type WatchPriority = "high" | "normal" | "low";
+type TestAlertChannel = "email" | "sms" | "both";
 
 type Watch = {
   watch_id: string;
@@ -184,7 +185,9 @@ export default function Dashboard() {
   const [notificationType, setNotificationType] = useState("both");
   const [watchPriority, setWatchPriority] = useState<WatchPriority>("normal");
   const [busy, setBusy] = useState(false);
-  const [testAlertBusy, setTestAlertBusy] = useState(false);
+  const [testAlertBusy, setTestAlertBusy] = useState<TestAlertChannel | null>(
+    null,
+  );
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [nextRefreshAt, setNextRefreshAt] = useState<string | null>(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
@@ -508,19 +511,19 @@ export default function Dashboard() {
     }
   }
 
-  async function sendTestAlert() {
+  async function sendTestAlert(channel: TestAlertChannel) {
     setBusy(true);
-    setTestAlertBusy(true);
+    setTestAlertBusy(channel);
     setNotice("");
     try {
       const response = await fetchJson<TestAlertResponse>("/alerts/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notification_type: "both" }),
+        body: JSON.stringify({ notification_type: channel }),
       });
       const deliverySummary = response.deliveries
-        .map((delivery) => `${delivery.channel} ${delivery.status}`)
-        .join(", ");
+        .map(formatTestDelivery)
+        .join("; ");
       setNotice(
         deliverySummary
           ? `Test alert attempted: ${deliverySummary}.`
@@ -530,7 +533,7 @@ export default function Dashboard() {
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Test alert failed.");
     } finally {
-      setTestAlertBusy(false);
+      setTestAlertBusy(null);
       setBusy(false);
     }
   }
@@ -854,12 +857,21 @@ export default function Dashboard() {
             <span>{settingsStatus?.environment ?? "checking"}</span>
             <button
               className="iconButton"
-              disabled={busy || testAlertBusy || !notificationsConfigured}
-              onClick={sendTestAlert}
+              disabled={busy || Boolean(testAlertBusy) || !notificationsConfigured}
+              onClick={() => sendTestAlert("email")}
               type="button"
             >
               <Send size={17} />
-              <span>{testAlertBusy ? "Sending" : "Test Alert"}</span>
+              <span>{testAlertBusy === "email" ? "Sending" : "Test Email"}</span>
+            </button>
+            <button
+              className="iconButton"
+              disabled={busy || Boolean(testAlertBusy) || !notificationsConfigured}
+              onClick={() => sendTestAlert("sms")}
+              type="button"
+            >
+              <Send size={17} />
+              <span>{testAlertBusy === "sms" ? "Sending" : "Test SMS"}</span>
             </button>
           </div>
         </div>
@@ -1624,6 +1636,23 @@ function parseApiError(message: string) {
   }
 
   return message;
+}
+
+function formatTestDelivery(delivery: {
+  channel: string;
+  status: string;
+  detail: string;
+}) {
+  if (delivery.status === "sent") {
+    return `${delivery.channel} sent`;
+  }
+
+  const detail = delivery.detail ? `: ${compactDetail(delivery.detail)}` : "";
+  return `${delivery.channel} ${delivery.status}${detail}`;
+}
+
+function compactDetail(detail: string) {
+  return detail.replace(/\s+/g, " ").slice(0, 220);
 }
 
 function formatCampType(campType: string) {

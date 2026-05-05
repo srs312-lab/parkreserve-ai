@@ -43,4 +43,4 @@ class EmailNotifier:
         except Exception as exc:
             return "failed", str(exc)
 
-        return "sent", f"Email sent to {to_email}."
+        return "sent", "Email sent."
