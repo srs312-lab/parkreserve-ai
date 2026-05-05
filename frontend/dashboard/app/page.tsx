@@ -806,10 +806,10 @@ export default function Dashboard() {
         <div className="topbarActions">
           <div className="refreshMeta">
             {lastRefreshedAt ? (
-              <span>Updated {formatDateTimeWithSeconds(lastRefreshedAt)}</span>
+              <span>Dashboard updated {formatDateTimeWithSeconds(lastRefreshedAt)}</span>
             ) : null}
             {secondsUntilNextRefresh !== null ? (
-              <span>Next refresh in {secondsUntilNextRefresh}s</span>
+              <span>Dashboard refresh in {secondsUntilNextRefresh}s</span>
             ) : null}
           </div>
           <button className="iconButton" onClick={refreshData} disabled={busy}>
@@ -1066,9 +1066,11 @@ export default function Dashboard() {
                       </span>
                       <span>
                         {group.nextCheckAt
-                          ? `Next ${formatDateTime(group.nextCheckAt)}`
+                          ? `Next availability check ${formatDateTime(
+                              group.nextCheckAt,
+                            )}`
                           : group.activeCount
-                            ? "Next check pending"
+                            ? "Availability check pending"
                             : "Paused"}
                       </span>
                       {group.alertCount ? (
@@ -1162,19 +1164,19 @@ export default function Dashboard() {
                             ) : null}
                             <span>
                               {watch.last_checked_at
-                                ? `Last checked ${formatDateTime(
+                                ? `Last availability check ${formatDateTime(
                                     watch.last_checked_at,
                                   )}`
-                                : "Not checked yet"}
+                                : "No availability check yet"}
                             </span>
                             <span>
                               {nextCheckByWatchId[watch.watch_id]
-                                ? `Next check ${formatDateTime(
+                                ? `Next availability check ${formatDateTime(
                                     nextCheckByWatchId[watch.watch_id],
                                   )}`
                                 : watch.status === "paused"
                                   ? "Paused"
-                                  : "Next check pending"}
+                                  : "Availability check pending"}
                             </span>
                           </div>
                         </div>
