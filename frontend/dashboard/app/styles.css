@@ -70,6 +70,14 @@ select {
   font-weight: 700;
 }
 
+.panelHeaderActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .eyebrow {
   margin: 0 0 4px;
   color: var(--accent);
@@ -821,6 +829,10 @@ button:disabled {
   }
 
   .topbarActions {
+    justify-content: flex-start;
+  }
+
+  .panelHeaderActions {
     justify-content: flex-start;
   }
 

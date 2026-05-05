@@ -1,3 +1,6 @@
+from datetime import date, datetime, timezone
+from uuid import uuid4
+
 from fastapi import APIRouter, HTTPException
 from typing import Optional
 
@@ -22,6 +25,8 @@ from app.schemas.reservations import (
     ParkSearchResult,
     PauseAgentRequest,
     SettingsStatus,
+    TestAlertRequest,
+    TestAlertResponse,
     UserPreferences,
     Watch,
     WatchSummary,
@@ -32,6 +37,8 @@ from app.schemas.reservations import (
 
 router = APIRouter()
 agent = ReservationAgent()
+TEST_ALERT_COOLDOWN_SECONDS = 300
+last_test_alert_sent_at: Optional[datetime] = None
 
 
 @router.post("/watch-reservation", response_model=WatchReservationResponse)
@@ -130,6 +137,66 @@ async def search_parks(
 @router.get("/alerts", response_model=list[Alert])
 def get_alerts(watch_id: Optional[str] = None) -> list[Alert]:
     return store.list_alerts(watch_id=watch_id)
+
+
+@router.post("/alerts/test", response_model=TestAlertResponse)
+async def send_test_alert(request: TestAlertRequest) -> TestAlertResponse:
+    global last_test_alert_sent_at
+
+    now = datetime.now(timezone.utc)
+    if last_test_alert_sent_at is not None:
+        elapsed_seconds = int((now - last_test_alert_sent_at).total_seconds())
+        remaining_seconds = TEST_ALERT_COOLDOWN_SECONDS - elapsed_seconds
+        if remaining_seconds > 0:
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "Test alert cooldown is active. "
+                    f"Try again in {remaining_seconds} seconds."
+                ),
+            )
+
+    today = date.today()
+    test_watch = Watch(
+        watch_id="test-alert",
+        status="active",
+        preferences=UserPreferences(
+            park_name="ParkReserve AI",
+            date_start=today,
+            date_end=today,
+            camp_type="any",
+            min_nights=1,
+            flexibility_days=0,
+            notification_type=request.notification_type,
+            email_address=settings.default_alert_email,
+            phone_number=settings.default_alert_phone,
+        ),
+    )
+    test_alert = Alert(
+        alert_id=str(uuid4()),
+        watch_id=test_watch.watch_id,
+        park_name="ParkReserve AI",
+        message=(
+            "Test alert: ParkReserve AI notifications are connected. "
+            "No reservation was booked."
+        ),
+        reservation_url=settings.recreation_gov_base_url,
+        created_at=now,
+        campground_name="Notification Test",
+        site="Test",
+        available_date=today,
+        available_end_date=today,
+        nights=1,
+        site_type="test",
+    )
+    deliveries = await agent.execution_agent.send_notifications(test_watch, test_alert)
+    last_test_alert_sent_at = now
+
+    return TestAlertResponse(
+        message="Test alert attempted.",
+        deliveries=deliveries,
+        cooldown_seconds=TEST_ALERT_COOLDOWN_SECONDS,
+    )
 
 
 @router.post("/pause-agent")

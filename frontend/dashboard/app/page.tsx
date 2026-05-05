@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  Send,
   Trash2,
   X,
 } from "lucide-react";
@@ -96,6 +97,12 @@ type SettingsStatus = {
   sms: IntegrationStatus;
 };
 
+type TestAlertResponse = {
+  message: string;
+  deliveries: { channel: string; status: string; detail: string }[];
+  cooldown_seconds: number;
+};
+
 type NextAvailability = {
   park_name: string;
   campground_name: string;
@@ -169,6 +176,7 @@ export default function Dashboard() {
   const [minNights, setMinNights] = useState(1);
   const [notificationType, setNotificationType] = useState("both");
   const [busy, setBusy] = useState(false);
+  const [testAlertBusy, setTestAlertBusy] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [nextRefreshAt, setNextRefreshAt] = useState<string | null>(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
@@ -177,6 +185,9 @@ export default function Dashboard() {
   const activeCount = useMemo(
     () => watches.filter((watch) => watch.status === "active").length,
     [watches],
+  );
+  const notificationsConfigured = Boolean(
+    settingsStatus?.email.configured || settingsStatus?.sms.configured,
   );
   const filteredAlerts = useMemo(() => {
     const visible =
@@ -318,7 +329,7 @@ export default function Dashboard() {
     const response = await fetch(`${API_BASE_URL}${path}`, init);
     if (!response.ok) {
       const message = await response.text();
-      throw new Error(message || response.statusText);
+      throw new Error(parseApiError(message) || response.statusText);
     }
     return response.json();
   }, []);
@@ -473,6 +484,33 @@ export default function Dashboard() {
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Action failed.");
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendTestAlert() {
+    setBusy(true);
+    setTestAlertBusy(true);
+    setNotice("");
+    try {
+      const response = await fetchJson<TestAlertResponse>("/alerts/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notification_type: "both" }),
+      });
+      const deliverySummary = response.deliveries
+        .map((delivery) => `${delivery.channel} ${delivery.status}`)
+        .join(", ");
+      setNotice(
+        deliverySummary
+          ? `Test alert attempted: ${deliverySummary}.`
+          : response.message,
+      );
+      await refreshData();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Test alert failed.");
+    } finally {
+      setTestAlertBusy(false);
       setBusy(false);
     }
   }
@@ -791,7 +829,18 @@ export default function Dashboard() {
       <section className="panel statusPanel">
         <div className="panelHeader">
           <h2>System Status</h2>
-          <span>{settingsStatus?.environment ?? "checking"}</span>
+          <div className="panelHeaderActions">
+            <span>{settingsStatus?.environment ?? "checking"}</span>
+            <button
+              className="iconButton"
+              disabled={busy || testAlertBusy || !notificationsConfigured}
+              onClick={sendTestAlert}
+              type="button"
+            >
+              <Send size={17} />
+              <span>{testAlertBusy ? "Sending" : "Test Alert"}</span>
+            </button>
+          </div>
         </div>
         <div className="statusGrid">
           <StatusItem
@@ -1484,6 +1533,31 @@ export default function Dashboard() {
       ) : null}
     </main>
   );
+}
+
+function parseApiError(message: string) {
+  if (!message) {
+    return "";
+  }
+
+  try {
+    const parsed = JSON.parse(message) as {
+      detail?: string | { msg?: string }[];
+    };
+    if (typeof parsed.detail === "string") {
+      return parsed.detail;
+    }
+    if (Array.isArray(parsed.detail)) {
+      return parsed.detail
+        .map((item) => item.msg)
+        .filter(Boolean)
+        .join(" ");
+    }
+  } catch {
+    return message;
+  }
+
+  return message;
 }
 
 function formatCampType(campType: string) {

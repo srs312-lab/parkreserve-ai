@@ -168,6 +168,10 @@ class SettingsStatus(BaseModel):
     sms: IntegrationStatus
 
 
+class TestAlertRequest(BaseModel):
+    notification_type: Literal["email", "sms", "both"] = "both"
+
+
 class WatchUpdateRequest(BaseModel):
     date_start: Optional[date] = None
     date_end: Optional[date] = None
@@ -194,6 +198,12 @@ class NotificationDelivery(BaseModel):
     channel: Literal["email", "sms"]
     status: NotificationStatus
     detail: str
+
+
+class TestAlertResponse(BaseModel):
+    message: str
+    deliveries: list[NotificationDelivery]
+    cooldown_seconds: int
 
 
 class Alert(BaseModel):
