@@ -26,7 +26,7 @@ The current product scope focuses on Recreation.gov campground inventory. The ar
 - Pause, resume, edit, check, and delete individual watches or whole groups.
 - Show last checked time, next scheduled check, backend poll interval, and dashboard refresh interval.
 - Find upcoming available date windows for a watch.
-- Send email, SMS, or both through SMTP and Twilio.
+- Send email, SMS, or both through Resend and Twilio.
 - Persist watches, alerts, and dedupe keys in Postgres.
 
 ## Screenshots
@@ -58,7 +58,7 @@ flowchart TD
     Recreation["Recreation.gov"]
     Scheduler["APScheduler"]
     Database["PostgreSQL"]
-    Notify["SMTP / Twilio"]
+    Notify["Resend / Twilio"]
 
     User --> Dashboard
     Dashboard --> API
@@ -83,7 +83,7 @@ flowchart TD
 | Availability collector | Recreation.gov HTTP endpoints |
 | Scheduler | APScheduler |
 | Persistence | PostgreSQL with SQLAlchemy/psycopg |
-| Notifications | SMTP email, Twilio SMS |
+| Notifications | Resend Email API, Twilio SMS |
 | Local dev | Uvicorn, Next dev server |
 
 ## Repository Layout
@@ -177,13 +177,13 @@ This is the normal-priority availability check interval. High-priority watches c
 Email alerts:
 
 ```text
+EMAIL_PROVIDER=resend
 DEFAULT_ALERT_EMAIL=you@example.com
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USERNAME=you@example.com
-SMTP_PASSWORD=your_smtp_app_password
-SMTP_FROM_EMAIL=you@example.com
+RESEND_API_KEY=your_resend_api_key
+RESEND_FROM_EMAIL="ParkReserve AI <alerts@yourdomain.com>"
 ```
+
+Resend sends through HTTPS, which works on Railway without SMTP port access. SMTP is still available for local/dev fallback by setting `EMAIL_PROVIDER=smtp` and providing `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_FROM_EMAIL`.
 
 SMS alerts:
 
@@ -223,10 +223,9 @@ Optional alert/search integrations:
 RIDB_API_KEY=...
 DEFAULT_ALERT_EMAIL=...
 DEFAULT_ALERT_PHONE=...
-SMTP_HOST=...
-SMTP_USERNAME=...
-SMTP_PASSWORD=...
-SMTP_FROM_EMAIL=...
+EMAIL_PROVIDER=resend
+RESEND_API_KEY=...
+RESEND_FROM_EMAIL=...
 TWILIO_ACCOUNT_SID=...
 TWILIO_AUTH_TOKEN=...
 TWILIO_FROM_PHONE=...
@@ -346,7 +345,7 @@ This prevents repeated notifications for the same campsite opening while still a
 
 - Recreation.gov campground availability is supported.
 - Auto-booking is intentionally not implemented.
-- SMTP and Twilio require valid provider credentials.
+- Resend and Twilio require valid provider credentials.
 - Highly competitive dates may return no availability; that still confirms the live source was checked.
 - Redis is present in configuration for future queue work, but APScheduler currently runs the polling jobs.
 
@@ -362,4 +361,4 @@ This prevents repeated notifications for the same campsite opening while still a
 
 ## Resume Bullet
 
-Built an autonomous reservation-monitoring platform that scans live Recreation.gov campground inventory, persists user watches in PostgreSQL, schedules recurring availability checks, deduplicates openings, and triggers email/SMS alerts through an agent-based FastAPI and Next.js workflow.
+Built an autonomous reservation-monitoring platform that scans live Recreation.gov campground inventory, persists user watches in PostgreSQL, schedules recurring availability checks, deduplicates openings, and triggers Resend/Twilio alerts through an agent-based FastAPI and Next.js workflow.

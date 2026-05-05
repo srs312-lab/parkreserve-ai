@@ -426,14 +426,36 @@ def get_settings_status() -> SettingsStatus:
 
 
 def _email_status() -> IntegrationStatus:
+    provider = settings.email_provider.lower()
+    if provider == "auto":
+        provider = "resend" if settings.resend_api_key else "smtp"
+
+    if provider == "smtp":
+        missing = [
+            name
+            for name, value in [
+                ("default recipient", settings.default_alert_email),
+                ("SMTP host", settings.smtp_host),
+                ("SMTP username", settings.smtp_username),
+                ("SMTP password", settings.smtp_password),
+                ("from email", settings.smtp_from_email),
+            ]
+            if not value
+        ]
+
+        return IntegrationStatus(
+            configured=not missing,
+            recipient=settings.default_alert_email,
+            provider=settings.smtp_host,
+            detail="configured" if not missing else f"missing {', '.join(missing)}",
+        )
+
     missing = [
         name
         for name, value in [
             ("default recipient", settings.default_alert_email),
-            ("SMTP host", settings.smtp_host),
-            ("SMTP username", settings.smtp_username),
-            ("SMTP password", settings.smtp_password),
-            ("from email", settings.smtp_from_email),
+            ("Resend API key", settings.resend_api_key),
+            ("Resend from email", settings.resend_from_email),
         ]
         if not value
     ]
@@ -441,7 +463,7 @@ def _email_status() -> IntegrationStatus:
     return IntegrationStatus(
         configured=not missing,
         recipient=settings.default_alert_email,
-        provider=settings.smtp_host,
+        provider="Resend HTTPS API",
         detail="configured" if not missing else f"missing {', '.join(missing)}",
     )
 

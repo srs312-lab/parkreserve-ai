@@ -103,7 +103,7 @@ Point out:
 
 Say:
 
-> Watches and alerts persist in Postgres, scheduler jobs keep running in the background, and notification delivery is handled through SMTP and Twilio.
+> Watches and alerts persist in Postgres, scheduler jobs keep running in the background, and notification delivery is handled through Resend and Twilio.
 
 ## 7. Architecture Close
 
@@ -114,5 +114,5 @@ End with:
 Resume bullet:
 
 ```text
-Built an autonomous reservation-monitoring platform that scans live Recreation.gov campground inventory, persists user watches in PostgreSQL, schedules recurring availability checks, deduplicates openings, and triggers email/SMS alerts through an agent-based FastAPI and Next.js workflow.
+Built an autonomous reservation-monitoring platform that scans live Recreation.gov campground inventory, persists user watches in PostgreSQL, schedules recurring availability checks, deduplicates openings, and triggers Resend/Twilio alerts through an agent-based FastAPI and Next.js workflow.
 ```
