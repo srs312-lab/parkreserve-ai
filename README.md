@@ -31,6 +31,7 @@ The current product scope focuses on Recreation.gov campground inventory. The ar
 - Track delivery success rate and filter alerts that need retry.
 - Surface watch analytics for hottest campgrounds and latest openings.
 - Protect the deployed dashboard with a password gate and shared backend API token.
+- Provide a public read-only demo dashboard with sample data at `/demo`.
 - Persist watches, alerts, and dedupe keys in Postgres.
 
 ## Screenshots
@@ -153,6 +154,12 @@ Open the dashboard:
 http://127.0.0.1:3001
 ```
 
+Open the safe public demo:
+
+```text
+http://127.0.0.1:3001/demo
+```
+
 ## Environment Variables
 
 `config/example.env` contains placeholders for local setup.
@@ -270,6 +277,14 @@ DASHBOARD_PASSWORD=generate_a_long_random_dashboard_password
 `DASHBOARD_PASSWORD` enables HTTP Basic Auth for the dashboard and its same-origin API proxy. `PARKRESERVE_API_AUTH_TOKEN` lets the Vercel proxy call the protected Railway backend without exposing the token in browser JavaScript.
 
 After Vercel gives you the dashboard URL, add that exact URL to the backend `CORS_ORIGINS` value and redeploy the backend.
+
+The public demo route is:
+
+```text
+https://your-parkreserve-dashboard.vercel.app/demo
+```
+
+It uses static sample data and keeps real backend calls, watches, and notification actions out of the public view.
 
 ## Demo Flow
 

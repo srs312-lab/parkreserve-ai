@@ -222,9 +222,26 @@ h2 {
   background: #fff6dd;
 }
 
+.demoBanner {
+  margin-bottom: 18px;
+  padding: 10px 12px;
+  border: 1px solid #d0dfd5;
+  border-radius: 8px;
+  background: #edf5ef;
+  color: var(--accent);
+  font-weight: 750;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: 430px 1fr;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.demoWorkspace {
+  display: grid;
+  grid-template-columns: 360px 1fr;
   gap: 18px;
   margin-bottom: 18px;
 }
@@ -426,6 +443,7 @@ select {
   height: 40px;
   gap: 8px;
   padding: 0 12px;
+  text-decoration: none;
 }
 
 .iconOnly {
@@ -617,6 +635,38 @@ button:disabled {
   margin-top: 2px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.demoControlGrid {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.demoField {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfb;
+}
+
+.demoField span,
+.demoLocked {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.demoField strong {
+  font-size: 13px;
+}
+
+.demoLocked {
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: var(--soft);
 }
 
 .watchAlertsHeader {
@@ -879,6 +929,7 @@ button:disabled {
 @media (max-width: 860px) {
   .metrics,
   .analyticsGrid,
+  .demoWorkspace,
   .healthGrid,
   .statusGrid,
   .workspace {

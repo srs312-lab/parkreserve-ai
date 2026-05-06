@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const AUTH_REALM = "ParkReserve AI";
+const PUBLIC_PATHS = ["/demo"];
 
 function unauthorized() {
   return new NextResponse("Authentication required.", {
@@ -33,6 +34,10 @@ function parseBasicAuth(header: string | null) {
 }
 
 export function middleware(request: NextRequest) {
+  if (PUBLIC_PATHS.some((path) => isPublicPath(request.nextUrl.pathname, path))) {
+    return NextResponse.next();
+  }
+
   const expectedPassword = process.env.DASHBOARD_PASSWORD?.trim();
   if (!expectedPassword) {
     return NextResponse.next();
@@ -54,3 +59,7 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
+
+function isPublicPath(pathname: string, publicPath: string) {
+  return pathname === publicPath || pathname.startsWith(`${publicPath}/`);
+}
