@@ -202,6 +202,7 @@ export default function Dashboard() {
   const [testAlertBusy, setTestAlertBusy] = useState<TestAlertChannel | null>(
     null,
   );
+  const [retryingAlertId, setRetryingAlertId] = useState<string | null>(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [nextRefreshAt, setNextRefreshAt] = useState<string | null>(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
@@ -554,6 +555,32 @@ export default function Dashboard() {
       setNotice(error instanceof Error ? error.message : "Test alert failed.");
     } finally {
       setTestAlertBusy(null);
+      setBusy(false);
+    }
+  }
+
+  async function retryAlertDelivery(alertId: string) {
+    setBusy(true);
+    setRetryingAlertId(alertId);
+    setNotice("");
+    try {
+      const alert = await fetchJson<Alert>(`/alerts/${alertId}/retry-delivery`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const deliverySummary = alert.deliveries
+        .map(formatTestDelivery)
+        .join("; ");
+      setNotice(
+        deliverySummary
+          ? `Delivery retry attempted: ${deliverySummary}.`
+          : "No delivery retry was needed.",
+      );
+      await refreshData();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Retry failed.");
+    } finally {
+      setRetryingAlertId(null);
       setBusy(false);
     }
   }
@@ -1519,9 +1546,25 @@ export default function Dashboard() {
                   )}
                 </div>
               </div>
-              <a href={alert.reservation_url} target="_blank" rel="noreferrer">
-                Open
-              </a>
+              <div className="alertActions">
+                {hasRetryableDelivery(alert) ? (
+                  <button
+                    className="iconButton"
+                    disabled={busy || retryingAlertId === alert.alert_id}
+                    onClick={() => retryAlertDelivery(alert.alert_id)}
+                    title="Retry failed delivery"
+                    type="button"
+                  >
+                    <RefreshCw size={16} />
+                    <span>
+                      {retryingAlertId === alert.alert_id ? "Retrying" : "Retry"}
+                    </span>
+                  </button>
+                ) : null}
+                <a href={alert.reservation_url} target="_blank" rel="noreferrer">
+                  Open
+                </a>
+              </div>
             </article>
           ))}
           {!filteredAlerts.length ? (
@@ -1673,6 +1716,16 @@ function formatTestDelivery(delivery: {
 
 function compactDetail(detail: string) {
   return detail.replace(/\s+/g, " ").slice(0, 220);
+}
+
+function hasRetryableDelivery(alert: Alert) {
+  if (!alert.deliveries.length) {
+    return true;
+  }
+
+  return alert.deliveries.some((delivery) =>
+    ["failed", "not_configured"].includes(delivery.status),
+  );
 }
 
 function formatCampType(campType: string) {

@@ -27,6 +27,7 @@ from app.schemas.reservations import (
     DuplicateWatchResponse,
     IntegrationStatus,
     NextAvailabilityResult,
+    NotificationDelivery,
     ParkSearchResult,
     PauseAgentRequest,
     SettingsStatus,
@@ -150,6 +151,30 @@ async def search_parks(
 @router.get("/alerts", response_model=list[Alert])
 def get_alerts(watch_id: Optional[str] = None) -> list[Alert]:
     return store.list_alerts(watch_id=watch_id)
+
+
+@router.post("/alerts/{alert_id}/retry-delivery", response_model=Alert)
+async def retry_alert_delivery(alert_id: str) -> Alert:
+    alert = store.get_alert(alert_id)
+    if alert is None:
+        raise HTTPException(status_code=404, detail="Alert not found.")
+
+    watch = store.get_watch(alert.watch_id)
+    if watch is None:
+        raise HTTPException(status_code=404, detail="Watch not found.")
+
+    channels = _retryable_delivery_channels(alert)
+    if not channels:
+        return alert
+
+    retried_deliveries = await agent.execution_agent.retry_notifications(
+        watch,
+        alert,
+        channels,
+    )
+    merged_deliveries = _merge_deliveries(alert.deliveries, retried_deliveries)
+
+    return store.update_alert_deliveries(alert.alert_id, merged_deliveries)
 
 
 @router.post("/alerts/test", response_model=TestAlertResponse)
@@ -466,6 +491,47 @@ def _email_status() -> IntegrationStatus:
         provider="Resend HTTPS API",
         detail="configured" if not missing else f"missing {', '.join(missing)}",
     )
+
+
+def _retryable_delivery_channels(alert: Alert) -> set[str]:
+    failed_channels = {
+        delivery.channel
+        for delivery in alert.deliveries
+        if delivery.status in {"failed", "not_configured"}
+    }
+    if failed_channels:
+        return failed_channels
+
+    if alert.deliveries:
+        return set()
+
+    watch = store.get_watch(alert.watch_id)
+    if watch is None:
+        return set()
+
+    notification_type = watch.preferences.notification_type
+    if notification_type == "both":
+        return {"email", "sms"}
+    if notification_type in {"email", "sms"}:
+        return {notification_type}
+    return set()
+
+
+def _merge_deliveries(
+    existing_deliveries: list[NotificationDelivery],
+    retried_deliveries: list[NotificationDelivery],
+) -> list[NotificationDelivery]:
+    deliveries_by_channel = {
+        delivery.channel: delivery for delivery in existing_deliveries
+    }
+    for delivery in retried_deliveries:
+        deliveries_by_channel[delivery.channel] = delivery
+
+    return [
+        delivery
+        for channel in ("email", "sms")
+        if (delivery := deliveries_by_channel.get(channel)) is not None
+    ]
 
 
 def _sms_status() -> IntegrationStatus:

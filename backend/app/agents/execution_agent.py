@@ -62,3 +62,31 @@ class ExecutionAgent:
             )
 
         return deliveries
+
+    async def retry_notifications(
+        self,
+        watch: Watch,
+        alert: Alert,
+        channels: set[str],
+    ) -> list[NotificationDelivery]:
+        deliveries: list[NotificationDelivery] = []
+
+        if "email" in channels:
+            status, detail = await self.email_notifier.send(
+                alert,
+                watch.preferences.email_address,
+            )
+            deliveries.append(
+                NotificationDelivery(channel="email", status=status, detail=detail)
+            )
+
+        if "sms" in channels:
+            status, detail = await self.sms_notifier.send(
+                alert,
+                watch.preferences.phone_number,
+            )
+            deliveries.append(
+                NotificationDelivery(channel="sms", status=status, detail=detail)
+            )
+
+        return deliveries

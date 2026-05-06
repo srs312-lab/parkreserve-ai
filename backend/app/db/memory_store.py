@@ -2,7 +2,13 @@ from datetime import datetime
 from uuid import uuid4
 from typing import Optional
 
-from app.schemas.reservations import Alert, AvailabilityResult, UserPreferences, Watch
+from app.schemas.reservations import (
+    Alert,
+    AvailabilityResult,
+    NotificationDelivery,
+    UserPreferences,
+    Watch,
+)
 
 
 class MemoryStore:
@@ -58,6 +64,25 @@ class MemoryStore:
 
     def add_alert(self, alert: Alert) -> None:
         self.alerts.append(alert)
+
+    def get_alert(self, alert_id: str) -> Optional[Alert]:
+        return next(
+            (alert for alert in self.alerts if alert.alert_id == alert_id),
+            None,
+        )
+
+    def update_alert_deliveries(
+        self,
+        alert_id: str,
+        deliveries: list[NotificationDelivery],
+    ) -> Alert:
+        for index, alert in enumerate(self.alerts):
+            if alert.alert_id == alert_id:
+                updated_alert = alert.model_copy(update={"deliveries": deliveries})
+                self.alerts[index] = updated_alert
+                return updated_alert
+
+        raise KeyError(alert_id)
 
     def list_watches(self) -> list[Watch]:
         return list(self.watches.values())

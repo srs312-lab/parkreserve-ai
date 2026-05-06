@@ -287,6 +287,7 @@ For a portfolio recording or live walkthrough, use the full script in [docs/demo
 | `POST` | `/watches/{watch_id}/check-now` | Run an immediate availability check. |
 | `GET` | `/watches/{watch_id}/next-available` | Find upcoming grouped availability windows. |
 | `GET` | `/alerts` | List generated alerts, optionally filtered by watch. |
+| `POST` | `/alerts/{alert_id}/retry-delivery` | Retry failed or missing alert deliveries. |
 | `GET` | `/scheduler/jobs` | Inspect active polling jobs and next run times. |
 | `GET` | `/settings/status` | Show safe runtime config and alert integration status. |
 | `GET` | `/db/status` | Confirm the active persistence backend. |

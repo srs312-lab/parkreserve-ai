@@ -7,7 +7,13 @@ import psycopg
 from psycopg.rows import dict_row
 
 from app.db.memory_store import MemoryStore
-from app.schemas.reservations import Alert, AvailabilityResult, UserPreferences, Watch
+from app.schemas.reservations import (
+    Alert,
+    AvailabilityResult,
+    NotificationDelivery,
+    UserPreferences,
+    Watch,
+)
 
 
 class PostgresStore(MemoryStore):
@@ -238,6 +244,80 @@ class PostgresStore(MemoryStore):
                 ),
             )
             connection.commit()
+
+    def get_alert(self, alert_id: str) -> Optional[Alert]:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    alert_id,
+                    watch_id,
+                    park_name,
+                    message,
+                    reservation_url,
+                    created_at,
+                    campground_name,
+                    facility_id,
+                    campsite_id,
+                    site,
+                    available_date,
+                    available_end_date,
+                    nights,
+                    site_type,
+                    deliveries
+                FROM reservation_alerts
+                WHERE alert_id = %s
+                """,
+                (alert_id,),
+            ).fetchone()
+
+        if row is None:
+            return None
+        return Alert.model_validate(row)
+
+    def update_alert_deliveries(
+        self,
+        alert_id: str,
+        deliveries: list[NotificationDelivery],
+    ) -> Alert:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                UPDATE reservation_alerts
+                SET deliveries = %s::jsonb
+                WHERE alert_id = %s
+                RETURNING
+                    alert_id,
+                    watch_id,
+                    park_name,
+                    message,
+                    reservation_url,
+                    created_at,
+                    campground_name,
+                    facility_id,
+                    campsite_id,
+                    site,
+                    available_date,
+                    available_end_date,
+                    nights,
+                    site_type,
+                    deliveries
+                """,
+                (
+                    json.dumps(
+                        [
+                            delivery.model_dump(mode="json")
+                            for delivery in deliveries
+                        ]
+                    ),
+                    alert_id,
+                ),
+            ).fetchone()
+            connection.commit()
+
+        if row is None:
+            raise KeyError(alert_id)
+        return Alert.model_validate(row)
 
     def list_watches(self) -> list[Watch]:
         with self._connect() as connection:
