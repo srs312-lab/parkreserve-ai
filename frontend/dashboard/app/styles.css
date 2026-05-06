@@ -103,7 +103,7 @@ h2 {
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 18px;
 }
@@ -148,16 +148,22 @@ h2 {
   margin-bottom: 18px;
 }
 
-.deliveryPanel {
+.deliveryPanel,
+.analyticsPanel {
   margin-bottom: 18px;
 }
 
 .statusGrid,
+.analyticsGrid,
 .healthGrid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
   margin-top: 14px;
+}
+
+.analyticsGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .statusItem {
@@ -569,6 +575,46 @@ button:disabled {
   background: #fbfcfb;
 }
 
+.hotWatchList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.hotWatchItem {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfb;
+}
+
+.hotWatchItem > span {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.hotWatchItem strong {
+  font-size: 13px;
+}
+
+.hotWatchItem p {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .watchAlertsHeader {
   display: flex;
   align-items: center;
@@ -828,6 +874,7 @@ button:disabled {
 
 @media (max-width: 860px) {
   .metrics,
+  .analyticsGrid,
   .healthGrid,
   .statusGrid,
   .workspace {

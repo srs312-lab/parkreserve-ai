@@ -13,6 +13,7 @@ import {
   Search,
   Send,
   ShieldCheck,
+  TrendingUp,
   Trash2,
   X,
 } from "lucide-react";
@@ -173,6 +174,15 @@ type WatchGroup = {
   latestAlertAt: string | null;
 };
 
+type WatchAnalyticsItem = {
+  watchId: string;
+  label: string;
+  parkName: string;
+  alertCount: number;
+  latestAlertAt: string | null;
+  latestOpening: string | null;
+};
+
 type DeleteTarget =
   | {
       type: "watch";
@@ -311,6 +321,52 @@ export default function Dashboard() {
         return groupedAlerts;
       }, {});
   }, [alerts]);
+  const watchAnalytics = useMemo(() => {
+    const watchItems = watches
+      .map<WatchAnalyticsItem>((watch) => {
+        const watchAlerts = alertsByWatchId[watch.watch_id] ?? [];
+        const latestAlert = watchAlerts[0] ?? null;
+        const latestOpening =
+          latestAlert?.available_date && latestAlert.available_end_date
+            ? `${latestAlert.available_date} to ${latestAlert.available_end_date}`
+            : latestAlert?.available_date ?? null;
+
+        return {
+          watchId: watch.watch_id,
+          label: watch.campground_name ?? watch.park_name,
+          parkName: watch.park_name,
+          alertCount: watchAlerts.length,
+          latestAlertAt: latestAlert?.created_at ?? null,
+          latestOpening,
+        };
+      })
+      .sort(
+        (left, right) =>
+          right.alertCount - left.alertCount ||
+          new Date(right.latestAlertAt ?? 0).getTime() -
+            new Date(left.latestAlertAt ?? 0).getTime() ||
+          left.label.localeCompare(right.label),
+      );
+    const topWatch = watchItems.find((item) => item.alertCount > 0) ?? null;
+    const latestAlert =
+      [...alerts].sort(
+        (left, right) =>
+          new Date(right.created_at).getTime() -
+          new Date(left.created_at).getTime(),
+      )[0] ?? null;
+
+    return {
+      hotWatches: watchItems.filter((item) => item.alertCount > 0).slice(0, 5),
+      latestAlert,
+      latestOpening:
+        latestAlert?.available_date && latestAlert.available_end_date
+          ? `${latestAlert.available_date} to ${latestAlert.available_end_date}`
+          : latestAlert?.available_date ?? null,
+      topWatch,
+      totalOpenings: alerts.length,
+      watchesWithOpenings: watchItems.filter((item) => item.alertCount > 0).length,
+    };
+  }, [alerts, alertsByWatchId, watches]);
   const nextCheckByWatchId = useMemo(() => {
     return jobs.reduce<Record<string, string | null>>((nextChecks, job) => {
       if (job.job_id.startsWith("watch:")) {
@@ -977,6 +1033,11 @@ export default function Dashboard() {
         <Metric icon={<CalendarDays size={18} />} label="Active Watches" value={activeCount} />
         <Metric icon={<Bell size={18} />} label="Alerts" value={alerts.length} />
         <Metric
+          icon={<TrendingUp size={18} />}
+          label="Hot Watches"
+          value={watchAnalytics.watchesWithOpenings}
+        />
+        <Metric
           icon={<ShieldCheck size={18} />}
           label="Delivery Health"
           value={deliveryHealth.metricLabel}
@@ -1102,6 +1163,68 @@ export default function Dashboard() {
             ok={Boolean(deliveryHealth.lastSuccessfulDeliveryAt)}
             value={deliveryHealth.lastSuccessfulDeliveryAt ? "sent" : "pending"}
           />
+        </div>
+      </section>
+
+      <section className="panel analyticsPanel">
+        <div className="panelHeader">
+          <h2>Watch Analytics</h2>
+          <span>
+            {watchAnalytics.totalOpenings} opening
+            {watchAnalytics.totalOpenings === 1 ? "" : "s"} found
+          </span>
+        </div>
+        <div className="analyticsGrid">
+          <StatusItem
+            detail="alerts generated"
+            label="Total openings"
+            ok={Boolean(watchAnalytics.totalOpenings)}
+            value={`${watchAnalytics.totalOpenings}`}
+          />
+          <StatusItem
+            detail={watchAnalytics.topWatch?.parkName ?? "waiting for alerts"}
+            label="Hottest watch"
+            ok={Boolean(watchAnalytics.topWatch)}
+            value={watchAnalytics.topWatch?.label ?? "none yet"}
+          />
+          <StatusItem
+            detail={
+              watchAnalytics.latestAlert
+                ? formatDateTimeWithSeconds(watchAnalytics.latestAlert.created_at)
+                : "none yet"
+            }
+            label="Latest opening"
+            ok={Boolean(watchAnalytics.latestAlert)}
+            value={watchAnalytics.latestOpening ?? "pending"}
+          />
+          <StatusItem
+            detail="watches with at least one alert"
+            label="Active signal"
+            ok={Boolean(watchAnalytics.watchesWithOpenings)}
+            value={`${watchAnalytics.watchesWithOpenings} watch${
+              watchAnalytics.watchesWithOpenings === 1 ? "" : "es"
+            }`}
+          />
+        </div>
+        <div className="hotWatchList">
+          {watchAnalytics.hotWatches.length ? (
+            watchAnalytics.hotWatches.map((item, index) => (
+              <article className="hotWatchItem" key={item.watchId}>
+                <span>{index + 1}</span>
+                <div>
+                  <strong>{item.label}</strong>
+                  <p>
+                    {item.alertCount} opening{item.alertCount === 1 ? "" : "s"}
+                    {item.latestOpening ? ` · latest ${item.latestOpening}` : ""}
+                  </p>
+                </div>
+              </article>
+            ))
+          ) : (
+            <p className="empty compact">
+              Watch analytics will populate after the first availability alert.
+            </p>
+          )}
         </div>
       </section>
 

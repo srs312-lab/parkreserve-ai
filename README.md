@@ -29,6 +29,7 @@ The current product scope focuses on Recreation.gov campground inventory. The ar
 - Send email, SMS, or both through Resend and Twilio.
 - Override email and phone recipients per watch when needed.
 - Track delivery success rate and filter alerts that need retry.
+- Surface watch analytics for hottest campgrounds and latest openings.
 - Persist watches, alerts, and dedupe keys in Postgres.
 
 ## Screenshots
