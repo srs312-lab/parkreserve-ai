@@ -120,6 +120,7 @@ type SettingsStatus = {
   environment: string;
   store: string;
   poll_interval_seconds: number;
+  api_auth_configured: boolean;
   recreation_gov_base_url: string;
   ridb_api_configured: boolean;
   email: IntegrationStatus;
@@ -1103,6 +1104,12 @@ export default function Dashboard() {
             label="Refresh"
             ok
             value="dashboard"
+          />
+          <StatusItem
+            detail={settingsStatus?.api_auth_configured ? "shared token set" : "local mode"}
+            label="API auth"
+            ok={Boolean(settingsStatus)}
+            value={settingsStatus?.api_auth_configured ? "protected" : "optional"}
           />
           <StatusItem
             detail={settingsStatus?.ridb_api_configured ? "API key set" : "public search"}

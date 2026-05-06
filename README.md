@@ -30,6 +30,7 @@ The current product scope focuses on Recreation.gov campground inventory. The ar
 - Override email and phone recipients per watch when needed.
 - Track delivery success rate and filter alerts that need retry.
 - Surface watch analytics for hottest campgrounds and latest openings.
+- Protect the deployed dashboard with a password gate and shared backend API token.
 - Persist watches, alerts, and dedupe keys in Postgres.
 
 ## Screenshots
@@ -177,6 +178,14 @@ POLL_INTERVAL_SECONDS=60
 
 This is the normal-priority availability check interval. High-priority watches check every 30 seconds, normal-priority watches check every 60 seconds, and low-priority watches check every 5 minutes. The dashboard auto-refresh interval is separate and currently configured in `frontend/dashboard/app/page.tsx`.
 
+Security:
+
+```text
+PARKRESERVE_API_AUTH_TOKEN=generate_a_long_random_shared_token
+```
+
+When this token is set on the backend, every backend route except `/health` requires the `X-Parkreserve-Token` header. Keep it unset for simple local development, or route local dashboard requests through the Next.js proxy with the same token.
+
 Email alerts:
 
 ```text
@@ -217,6 +226,7 @@ Required production values:
 ENVIRONMENT=production
 DATABASE_URL=postgresql+psycopg://...
 CORS_ORIGINS=https://your-parkreserve-dashboard.vercel.app
+PARKRESERVE_API_AUTH_TOKEN=...
 POLL_INTERVAL_SECONDS=60
 ```
 
@@ -248,11 +258,16 @@ Create a Vercel project with root directory:
 frontend/dashboard
 ```
 
-The dashboard includes [frontend/dashboard/vercel.json](frontend/dashboard/vercel.json). Set this Vercel environment variable:
+The dashboard includes [frontend/dashboard/vercel.json](frontend/dashboard/vercel.json). Set these Vercel environment variables:
 
 ```text
-NEXT_PUBLIC_API_BASE_URL=https://your-parkreserve-api.up.railway.app
+PARKRESERVE_API_PROXY_TARGET=https://your-parkreserve-api.up.railway.app
+PARKRESERVE_API_AUTH_TOKEN=the_same_value_as_railway
+DASHBOARD_USERNAME=parkreserve
+DASHBOARD_PASSWORD=generate_a_long_random_dashboard_password
 ```
+
+`DASHBOARD_PASSWORD` enables HTTP Basic Auth for the dashboard and its same-origin API proxy. `PARKRESERVE_API_AUTH_TOKEN` lets the Vercel proxy call the protected Railway backend without exposing the token in browser JavaScript.
 
 After Vercel gives you the dashboard URL, add that exact URL to the backend `CORS_ORIGINS` value and redeploy the backend.
 

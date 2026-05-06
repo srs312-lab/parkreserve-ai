@@ -452,6 +452,9 @@ def get_settings_status() -> SettingsStatus:
         environment=settings.environment,
         store=store_backend_name(),
         poll_interval_seconds=settings.poll_interval_seconds,
+        api_auth_configured=bool(
+            (settings.parkreserve_api_auth_token or "").strip()
+        ),
         recreation_gov_base_url=settings.recreation_gov_base_url,
         ridb_api_configured=bool(settings.ridb_api_key),
         email=_email_status(),

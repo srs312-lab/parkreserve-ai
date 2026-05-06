@@ -172,6 +172,7 @@ class SettingsStatus(BaseModel):
     environment: str
     store: str
     poll_interval_seconds: int
+    api_auth_configured: bool
     recreation_gov_base_url: str
     ridb_api_configured: bool
     email: IntegrationStatus

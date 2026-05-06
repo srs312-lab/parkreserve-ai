@@ -36,6 +36,20 @@ function stripHopByHopHeaders(headers: Headers) {
   HOP_BY_HOP_HEADERS.forEach((header) => headers.delete(header));
 }
 
+function prepareBackendHeaders(headers: Headers) {
+  const requestHeaders = new Headers(headers);
+  stripHopByHopHeaders(requestHeaders);
+  requestHeaders.delete("authorization");
+  requestHeaders.delete("cookie");
+
+  const apiToken = process.env.PARKRESERVE_API_AUTH_TOKEN?.trim();
+  if (apiToken) {
+    requestHeaders.set("x-parkreserve-token", apiToken);
+  }
+
+  return requestHeaders;
+}
+
 async function proxyRequest(request: Request, context: RouteContext) {
   const { path } = await context.params;
   const sourceUrl = new URL(request.url);
@@ -43,8 +57,7 @@ async function proxyRequest(request: Request, context: RouteContext) {
     `${path.map(encodeURIComponent).join("/")}${sourceUrl.search}`,
     getBackendBaseUrl(),
   );
-  const requestHeaders = new Headers(request.headers);
-  stripHopByHopHeaders(requestHeaders);
+  const requestHeaders = prepareBackendHeaders(request.headers);
 
   const method = request.method.toUpperCase();
   const body =

@@ -12,6 +12,7 @@ class Settings(BaseSettings):
         "http://localhost:3001,"
         "http://127.0.0.1:3001"
     )
+    parkreserve_api_auth_token: Optional[str] = None
     poll_interval_seconds: int = 60
     recreation_gov_base_url: str = "https://www.recreation.gov"
     ridb_base_url: str = "https://ridb.recreation.gov/api/v1"

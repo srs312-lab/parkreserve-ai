@@ -162,6 +162,10 @@ h2 {
   margin-top: 14px;
 }
 
+.statusGrid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
 .analyticsGrid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }

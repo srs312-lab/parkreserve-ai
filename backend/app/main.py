@@ -1,5 +1,8 @@
-from fastapi import FastAPI
+import secrets
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.routes import router
 from app.config.settings import settings
@@ -25,6 +28,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def require_api_token(request: Request, call_next):
+    auth_token = (settings.parkreserve_api_auth_token or "").strip()
+    if not auth_token or request.method == "OPTIONS" or request.url.path == "/health":
+        return await call_next(request)
+
+    request_token = (request.headers.get("x-parkreserve-token") or "").strip()
+    if not request_token or not secrets.compare_digest(request_token, auth_token):
+        return JSONResponse(
+            {"detail": "Missing or invalid API token."},
+            status_code=401,
+        )
+
+    return await call_next(request)
 
 
 @app.on_event("startup")
