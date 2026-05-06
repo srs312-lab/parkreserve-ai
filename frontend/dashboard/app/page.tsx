@@ -51,6 +51,8 @@ type Watch = {
   min_nights: number;
   notification_type: "email" | "sms" | "both" | "push";
   priority: WatchPriority;
+  email_address: string | null;
+  phone_number_masked: string | null;
   check_interval_seconds: number;
   last_checked_at: string | null;
 };
@@ -141,6 +143,8 @@ type WatchEditDraft = {
   min_nights: number;
   notification_type: Watch["notification_type"];
   priority: WatchPriority;
+  email_address: string;
+  phone_number: string;
 };
 
 type WatchGroup = {
@@ -198,6 +202,8 @@ export default function Dashboard() {
   const [minNights, setMinNights] = useState(1);
   const [notificationType, setNotificationType] = useState("both");
   const [watchPriority, setWatchPriority] = useState<WatchPriority>("normal");
+  const [alertEmail, setAlertEmail] = useState("");
+  const [alertPhone, setAlertPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [testAlertBusy, setTestAlertBusy] = useState<TestAlertChannel | null>(
     null,
@@ -447,6 +453,8 @@ export default function Dashboard() {
     const selectedCampgrounds = campgrounds.filter((campground) =>
       selectedCampgroundIds.includes(campground.facility_id),
     );
+    const emailAddress = alertEmail.trim() || undefined;
+    const phoneNumber = alertPhone.trim() || undefined;
 
     if (!selectedCampgrounds.length) {
       setNotice("Select at least one campground first.");
@@ -473,6 +481,8 @@ export default function Dashboard() {
               flexibility_days: 0,
               notification_type: notificationType,
               priority: watchPriority,
+              email_address: emailAddress,
+              phone_number: phoneNumber,
             })),
           }),
         },
@@ -735,6 +745,8 @@ export default function Dashboard() {
       min_nights: watch.min_nights,
       notification_type: watch.notification_type,
       priority: watch.priority,
+      email_address: watch.email_address ?? "",
+      phone_number: "",
     });
   }
 
@@ -756,10 +768,15 @@ export default function Dashboard() {
     setBusy(true);
     setNotice("");
     try {
+      const updatePayload = {
+        ...editDraft,
+        email_address: editDraft.email_address.trim() || undefined,
+        phone_number: editDraft.phone_number.trim() || undefined,
+      };
       await fetchJson(`/watches/${watchId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editDraft),
+        body: JSON.stringify(updatePayload),
       });
       setNextOpenings((current) => {
         const next = { ...current };
@@ -1118,6 +1135,24 @@ export default function Dashboard() {
               </select>
             </label>
             <label>
+              Email recipient
+              <input
+                placeholder={settingsStatus?.email.recipient ?? "Use default email"}
+                type="email"
+                value={alertEmail}
+                onChange={(event) => setAlertEmail(event.target.value)}
+              />
+            </label>
+            <label>
+              Phone recipient
+              <input
+                placeholder={settingsStatus?.sms.recipient ?? "Use default phone"}
+                type="tel"
+                value={alertPhone}
+                onChange={(event) => setAlertPhone(event.target.value)}
+              />
+            </label>
+            <label>
               Priority
               <select
                 value={watchPriority}
@@ -1261,6 +1296,12 @@ export default function Dashboard() {
                               {formatPriority(watch.priority)} priority · every{" "}
                               {formatDuration(watch.check_interval_seconds)}
                             </span>
+                            {watch.email_address ? (
+                              <span>Email {watch.email_address}</span>
+                            ) : null}
+                            {watch.phone_number_masked ? (
+                              <span>SMS {watch.phone_number_masked}</span>
+                            ) : null}
                             <span>
                               {watch.last_checked_at
                                 ? `Last availability check ${formatDateTime(
@@ -1412,6 +1453,40 @@ export default function Dashboard() {
                               <option value="email">Email</option>
                               <option value="sms">SMS</option>
                             </select>
+                          </label>
+                          <label>
+                            Email recipient
+                            <input
+                              placeholder={
+                                settingsStatus?.email.recipient ?? "Use default email"
+                              }
+                              type="email"
+                              value={editDraft.email_address}
+                              onChange={(event) =>
+                                setEditDraft({
+                                  ...editDraft,
+                                  email_address: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Phone recipient
+                            <input
+                              placeholder={
+                                watch.phone_number_masked
+                                  ? `${watch.phone_number_masked} · type to replace`
+                                  : settingsStatus?.sms.recipient ?? "Use default phone"
+                              }
+                              type="tel"
+                              value={editDraft.phone_number}
+                              onChange={(event) =>
+                                setEditDraft({
+                                  ...editDraft,
+                                  phone_number: event.target.value,
+                                })
+                              }
+                            />
                           </label>
                           <label>
                             Priority

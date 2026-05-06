@@ -27,6 +27,7 @@ The current product scope focuses on Recreation.gov campground inventory. The ar
 - Show last checked time, next scheduled check, backend poll interval, and dashboard refresh interval.
 - Find upcoming available date windows for a watch.
 - Send email, SMS, or both through Resend and Twilio.
+- Override email and phone recipients per watch when needed.
 - Persist watches, alerts, and dedupe keys in Postgres.
 
 ## Screenshots

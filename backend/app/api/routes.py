@@ -284,6 +284,13 @@ def update_watch(watch_id: str, request: WatchUpdateRequest) -> WatchSummary:
     updates = request.model_dump(exclude_none=True)
     if "camp_type" in updates:
         updates["camp_type"] = updates["camp_type"].strip().lower()
+    for contact_field in ("email_address", "phone_number"):
+        if contact_field in updates:
+            contact_value = updates[contact_field].strip()
+            if contact_value:
+                updates[contact_field] = contact_value
+            else:
+                updates.pop(contact_field)
 
     date_start = updates.get("date_start", watch.preferences.date_start)
     date_end = updates.get("date_end", watch.preferences.date_end)
@@ -328,6 +335,8 @@ def _watch_summary(watch) -> WatchSummary:
         min_nights=watch.preferences.min_nights,
         notification_type=watch.preferences.notification_type,
         priority=watch.preferences.priority,
+        email_address=watch.preferences.email_address,
+        phone_number_masked=_mask_phone(watch.preferences.phone_number),
         check_interval_seconds=watch_check_interval_seconds(
             watch.preferences.priority
         ),

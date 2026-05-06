@@ -189,6 +189,8 @@ class WatchUpdateRequest(BaseModel):
     min_nights: Optional[int] = Field(None, ge=1, le=30)
     notification_type: Optional[NotificationType] = None
     priority: Optional[WatchPriority] = None
+    email_address: Optional[str] = None
+    phone_number: Optional[str] = None
 
 
 class WatchSummary(BaseModel):
@@ -203,6 +205,8 @@ class WatchSummary(BaseModel):
     min_nights: int = 1
     notification_type: NotificationType
     priority: WatchPriority = "normal"
+    email_address: Optional[str] = None
+    phone_number_masked: Optional[str] = None
     check_interval_seconds: int
     last_checked_at: Optional[datetime] = None
 
