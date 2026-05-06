@@ -12,6 +12,7 @@ import {
   Save,
   Search,
   Send,
+  ShieldCheck,
   Trash2,
   X,
 } from "lucide-react";
@@ -38,6 +39,12 @@ function getApiBaseUrl() {
 
 type WatchPriority = "high" | "normal" | "low";
 type TestAlertChannel = "email" | "sms" | "both";
+type AlertDeliveryFilter =
+  | "all"
+  | "sent"
+  | "needs_retry"
+  | "email_failed"
+  | "sms_failed";
 
 type Watch = {
   watch_id: string;
@@ -180,6 +187,8 @@ export default function Dashboard() {
   const [watches, setWatches] = useState<Watch[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [alertWatchFilter, setAlertWatchFilter] = useState("all");
+  const [alertDeliveryFilter, setAlertDeliveryFilter] =
+    useState<AlertDeliveryFilter>("all");
   const [jobs, setJobs] = useState<SchedulerJob[]>([]);
   const [settingsStatus, setSettingsStatus] = useState<SettingsStatus | null>(null);
   const [dbStore, setDbStore] = useState("checking");
@@ -222,16 +231,73 @@ export default function Dashboard() {
     settingsStatus?.email.configured || settingsStatus?.sms.configured,
   );
   const filteredAlerts = useMemo(() => {
-    const visible =
+    const watchFilteredAlerts =
       alertWatchFilter === "all"
         ? alerts
         : alerts.filter((alert) => alert.watch_id === alertWatchFilter);
+    const visible = watchFilteredAlerts.filter((alert) =>
+      alertMatchesDeliveryFilter(alert, alertDeliveryFilter),
+    );
 
     return [...visible].sort(
       (left, right) =>
         new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
     );
-  }, [alertWatchFilter, alerts]);
+  }, [alertDeliveryFilter, alertWatchFilter, alerts]);
+  const deliveryHealth = useMemo(() => {
+    let sentDeliveries = 0;
+    let totalDeliveries = 0;
+    let emailFailures = 0;
+    let smsFailures = 0;
+    let retryAlertCount = 0;
+    let lastSuccessfulDeliveryAt: string | null = null;
+
+    alerts.forEach((alert) => {
+      if (hasRetryableDelivery(alert)) {
+        retryAlertCount += 1;
+      }
+
+      alert.deliveries.forEach((delivery) => {
+        totalDeliveries += 1;
+
+        if (delivery.status === "sent") {
+          sentDeliveries += 1;
+          if (
+            !lastSuccessfulDeliveryAt ||
+            new Date(alert.created_at).getTime() >
+              new Date(lastSuccessfulDeliveryAt).getTime()
+          ) {
+            lastSuccessfulDeliveryAt = alert.created_at;
+          }
+          return;
+        }
+
+        if (isFailedDelivery(delivery)) {
+          if (delivery.channel === "email") {
+            emailFailures += 1;
+          }
+          if (delivery.channel === "sms") {
+            smsFailures += 1;
+          }
+        }
+      });
+    });
+
+    const successRate = totalDeliveries
+      ? Math.round((sentDeliveries / totalDeliveries) * 100)
+      : null;
+
+    return {
+      emailFailures,
+      lastSuccessfulDeliveryAt,
+      metricLabel: successRate === null ? "n/a" : `${successRate}%`,
+      retryAlertCount,
+      sentDeliveries,
+      smsFailures,
+      successRate,
+      totalDeliveries,
+    };
+  }, [alerts]);
   const alertsByWatchId = useMemo(() => {
     return [...alerts]
       .sort(
@@ -910,6 +976,11 @@ export default function Dashboard() {
       <section className="metrics">
         <Metric icon={<CalendarDays size={18} />} label="Active Watches" value={activeCount} />
         <Metric icon={<Bell size={18} />} label="Alerts" value={alerts.length} />
+        <Metric
+          icon={<ShieldCheck size={18} />}
+          label="Delivery Health"
+          value={deliveryHealth.metricLabel}
+        />
         <Metric icon={<Play size={18} />} label="Scheduled Jobs" value={jobs.length} />
         <Metric icon={<Database size={18} />} label="Store" value={dbStore} />
       </section>
@@ -977,6 +1048,59 @@ export default function Dashboard() {
             label="RIDB"
             ok={Boolean(settingsStatus)}
             value={settingsStatus?.ridb_api_configured ? "configured" : "optional"}
+          />
+        </div>
+      </section>
+
+      <section className="panel deliveryPanel">
+        <div className="panelHeader">
+          <h2>Delivery Health</h2>
+          <span>
+            {deliveryHealth.totalDeliveries
+              ? `${deliveryHealth.sentDeliveries}/${deliveryHealth.totalDeliveries} sent`
+              : "no deliveries yet"}
+          </span>
+        </div>
+        <div className="healthGrid">
+          <StatusItem
+            detail={
+              deliveryHealth.totalDeliveries
+                ? `${deliveryHealth.sentDeliveries} sent of ${deliveryHealth.totalDeliveries}`
+                : "waiting for first alert"
+            }
+            label="Success rate"
+            ok={!deliveryHealth.retryAlertCount}
+            value={deliveryHealth.metricLabel}
+          />
+          <StatusItem
+            detail="failed or missing channels"
+            label="Needs retry"
+            ok={!deliveryHealth.retryAlertCount}
+            value={`${deliveryHealth.retryAlertCount} alert${
+              deliveryHealth.retryAlertCount === 1 ? "" : "s"
+            }`}
+          />
+          <StatusItem
+            detail={`${deliveryHealth.emailFailures} failed`}
+            label="Email"
+            ok={!deliveryHealth.emailFailures}
+            value={deliveryHealth.emailFailures ? "attention" : "healthy"}
+          />
+          <StatusItem
+            detail={`${deliveryHealth.smsFailures} failed`}
+            label="SMS"
+            ok={!deliveryHealth.smsFailures}
+            value={deliveryHealth.smsFailures ? "attention" : "healthy"}
+          />
+          <StatusItem
+            detail={
+              deliveryHealth.lastSuccessfulDeliveryAt
+                ? formatDateTimeWithSeconds(deliveryHealth.lastSuccessfulDeliveryAt)
+                : "none yet"
+            }
+            label="Last success"
+            ok={Boolean(deliveryHealth.lastSuccessfulDeliveryAt)}
+            value={deliveryHealth.lastSuccessfulDeliveryAt ? "sent" : "pending"}
           />
         </div>
       </section>
@@ -1579,6 +1703,18 @@ export default function Dashboard() {
                 </option>
               ))}
             </select>
+            <select
+              value={alertDeliveryFilter}
+              onChange={(event) =>
+                setAlertDeliveryFilter(event.target.value as AlertDeliveryFilter)
+              }
+            >
+              <option value="all">All deliveries</option>
+              <option value="sent">Sent only</option>
+              <option value="needs_retry">Needs retry</option>
+              <option value="email_failed">Email failed</option>
+              <option value="sms_failed">SMS failed</option>
+            </select>
             <span>{filteredAlerts.length} shown</span>
           </div>
         </div>
@@ -1793,13 +1929,40 @@ function compactDetail(detail: string) {
   return detail.replace(/\s+/g, " ").slice(0, 220);
 }
 
+function isFailedDelivery(delivery: Alert["deliveries"][number]) {
+  return delivery.status === "failed" || delivery.status === "not_configured";
+}
+
 function hasRetryableDelivery(alert: Alert) {
   if (!alert.deliveries.length) {
     return true;
   }
 
-  return alert.deliveries.some((delivery) =>
-    ["failed", "not_configured"].includes(delivery.status),
+  return alert.deliveries.some(isFailedDelivery);
+}
+
+function alertMatchesDeliveryFilter(
+  alert: Alert,
+  deliveryFilter: AlertDeliveryFilter,
+) {
+  if (deliveryFilter === "all") {
+    return true;
+  }
+
+  if (deliveryFilter === "needs_retry") {
+    return hasRetryableDelivery(alert);
+  }
+
+  if (deliveryFilter === "sent") {
+    return (
+      alert.deliveries.length > 0 &&
+      alert.deliveries.every((delivery) => delivery.status === "sent")
+    );
+  }
+
+  const failedChannel = deliveryFilter === "email_failed" ? "email" : "sms";
+  return alert.deliveries.some(
+    (delivery) => delivery.channel === failedChannel && isFailedDelivery(delivery),
   );
 }
 
