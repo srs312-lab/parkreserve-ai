@@ -4,7 +4,13 @@
 
 Autonomous campground reservation monitoring for U.S. national parks and Recreation.gov facilities.
 
+**Live demo:** [parkreserve-ai-dashboard.vercel.app/demo](https://parkreserve-ai-dashboard.vercel.app/demo)
+
+**Repository:** [github.com/srs312-lab/parkreserve-ai](https://github.com/srs312-lab/parkreserve-ai)
+
 ParkReserve AI lets a user search parks and campgrounds, create one or many reservation watches, continuously poll real Recreation.gov availability, and send email/SMS alerts when matching openings appear. It is built as a portfolio-ready agent system with a FastAPI backend, a Next.js dashboard, Postgres persistence, scheduled background checks, and notification integrations.
+
+The public demo uses static sample data and disabled controls. The real production dashboard is password protected, and backend API routes are protected by a shared server-side token.
 
 ## Why This Exists
 
@@ -36,6 +42,10 @@ The current product scope focuses on Recreation.gov campground inventory. The ar
 
 ## Screenshots
 
+### Public Demo
+
+![Public ParkReserve AI demo dashboard with sample watch analytics](docs/screenshots/public-demo.png)
+
 ### Dashboard
 
 ![ParkReserve AI dashboard with grouped Yosemite watches](docs/screenshots/dashboard.png)
@@ -53,8 +63,10 @@ The current product scope focuses on Recreation.gov campground inventory. The ar
 ```mermaid
 flowchart TD
     User["User"]
-    Dashboard["Next.js Dashboard"]
-    API["FastAPI Backend"]
+    PublicDemo["Public Demo Route<br/>Static Sample Data"]
+    Dashboard["Protected Next.js Dashboard"]
+    Proxy["Vercel API Proxy<br/>Injects Server Token"]
+    API["Railway FastAPI Backend<br/>Token-Protected Routes"]
     Agent["Reservation Agent Layer"]
     Search["Search Agent"]
     Preference["Preference Agent"]
@@ -63,20 +75,24 @@ flowchart TD
     Recreation["Recreation.gov"]
     Scheduler["APScheduler"]
     Database["PostgreSQL"]
-    Notify["Resend / Twilio"]
+    Email["Resend Email API"]
+    SMS["Twilio SMS"]
 
+    User --> PublicDemo
     User --> Dashboard
-    Dashboard --> API
+    Dashboard --> Proxy
+    Proxy --> API
     API --> Agent
     API --> Scheduler
+    API --> Database
     Agent --> Preference
     Agent --> Search
     Search --> Recreation
     Agent --> Decision
     Decision --> Execution
-    Execution --> Notify
-    API --> Database
     Scheduler --> Agent
+    Execution --> Email
+    Execution --> SMS
 ```
 
 ## Tech Stack
@@ -223,6 +239,13 @@ RIDB_API_KEY=your_ridb_api_key
 
 The repo includes deployment-ready config for a Vercel dashboard and Railway FastAPI backend.
 
+| Surface | URL | Access |
+| --- | --- | --- |
+| Public demo | `https://parkreserve-ai-dashboard.vercel.app/demo` | Open, static sample data |
+| Private dashboard | `https://parkreserve-ai-dashboard.vercel.app/` | HTTP Basic Auth |
+| Backend health | `https://parkreserve-ai-production.up.railway.app/health` | Public health check |
+| Backend API | Railway service routes | Requires `X-Parkreserve-Token` |
+
 ### Backend On Railway
 
 Railway uses [railway.json](railway.json) with [backend/Dockerfile](backend/Dockerfile). Add a Railway Postgres database, then set backend environment variables from [config/production.env.example](config/production.env.example).
@@ -286,22 +309,34 @@ https://your-parkreserve-dashboard.vercel.app/demo
 
 It uses static sample data and keeps real backend calls, watches, and notification actions out of the public view.
 
+## Production Readiness
+
+- Public demo is isolated from real watches and real notification actions.
+- Private dashboard uses HTTP Basic Auth through Next.js middleware.
+- Railway backend requires `X-Parkreserve-Token` for every route except `/health`.
+- Vercel API proxy injects the backend token server-side, so browser JavaScript never sees it.
+- Scheduler uses per-watch priority intervals instead of forcing every watch to poll aggressively.
+- Alert deduplication prevents repeated notifications for the same campsite/date opening.
+- Delivery records track email/SMS success and support retry for failed channels.
+- Auto-booking is intentionally not implemented; the product alerts users without completing purchases.
+
 ## Demo Flow
 
 For a portfolio recording or live walkthrough, use the full script in [docs/demo-script.md](docs/demo-script.md).
 
-1. Start the backend and dashboard.
-2. Confirm `/settings/status` shows `PostgresStore` and configured alert channels.
-3. In the dashboard, search for `Yosemite`.
-4. Select Upper Pines, Lower Pines, and North Pines.
-5. Use a future date window, for example `2026-05-10` to `2026-05-13`.
-6. Set `min_nights` to `1` or `2` depending on whether shorter openings should trigger alerts.
-7. Choose `high`, `normal`, or `low` priority depending on how aggressively the watch should poll.
-8. Choose `both` for email and SMS.
-9. Create the batch watch.
-10. Use group-level check now to trigger an immediate Recreation.gov lookup.
-11. Open next-available dates to show fallback inventory discovery.
-12. Pause, resume, edit, or delete a group to demonstrate operational controls.
+1. Open the public demo at `/demo` and explain that it is safe, static sample data.
+2. Show the protected production dashboard or local dashboard for real controls.
+3. Confirm `/settings/status` shows `PostgresStore`, API auth, and configured alert channels.
+4. Search for `Yosemite`.
+5. Select Upper Pines, Lower Pines, and North Pines.
+6. Use a future date window, for example `2026-05-10` to `2026-05-13`.
+7. Set `min_nights` to `1` or `2` depending on whether shorter openings should trigger alerts.
+8. Choose `high`, `normal`, or `low` priority depending on how aggressively the watch should poll.
+9. Choose `both` for email and SMS.
+10. Create the batch watch.
+11. Use group-level check now to trigger an immediate Recreation.gov lookup.
+12. Open next-available dates to show fallback inventory discovery.
+13. Pause, resume, edit, or delete a group to demonstrate operational controls.
 
 ## API Reference
 
@@ -390,8 +425,8 @@ This prevents repeated notifications for the same campsite opening while still a
 - Add Redis-backed distributed polling.
 - Add fallback recommendations across nearby parks and campgrounds.
 - Add permit and timed-entry inventory sources.
-- Add alert analytics and watch success metrics.
-- Deploy a public demo environment.
+- Add richer trend charts for alert volume and campground demand.
+- Add a portfolio case study page with product decisions and screenshots.
 
 ## Resume Bullet
 
