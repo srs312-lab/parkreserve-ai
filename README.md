@@ -8,6 +8,8 @@ Autonomous campground reservation monitoring for U.S. national parks and Recreat
 
 **Repository:** [github.com/srs312-lab/parkreserve-ai](https://github.com/srs312-lab/parkreserve-ai)
 
+**Case study:** [docs/case-study.md](docs/case-study.md)
+
 ParkReserve AI lets a user search parks and campgrounds, create one or many reservation watches, continuously poll real Recreation.gov availability, and send email/SMS alerts when matching openings appear. It is built as a portfolio-ready agent system with a FastAPI backend, a Next.js dashboard, Postgres persistence, scheduled background checks, and notification integrations.
 
 The public demo uses static sample data and disabled controls. The real production dashboard is password protected, and backend API routes are protected by a shared server-side token.
