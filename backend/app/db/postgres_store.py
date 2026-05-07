@@ -11,6 +11,7 @@ from app.schemas.reservations import (
     Alert,
     AvailabilityResult,
     NotificationDelivery,
+    ReservationCheckLog,
     UserPreferences,
     Watch,
 )
@@ -72,6 +73,20 @@ class PostgresStore(MemoryStore):
                 CREATE TABLE IF NOT EXISTS reservation_alert_keys (
                     alert_key TEXT PRIMARY KEY,
                     watch_id TEXT NOT NULL REFERENCES reservation_watches(watch_id)
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS reservation_check_logs (
+                    log_id TEXT PRIMARY KEY,
+                    watch_id TEXT NOT NULL REFERENCES reservation_watches(watch_id),
+                    checked_at TIMESTAMPTZ NOT NULL,
+                    status TEXT NOT NULL,
+                    result_count INTEGER NOT NULL DEFAULT 0,
+                    alert_created BOOLEAN NOT NULL DEFAULT FALSE,
+                    error_message TEXT,
+                    top_match_summary TEXT
                 )
                 """
             )
@@ -173,6 +188,10 @@ class PostgresStore(MemoryStore):
             )
             connection.execute(
                 "DELETE FROM reservation_alerts WHERE watch_id = %s",
+                (watch_id,),
+            )
+            connection.execute(
+                "DELETE FROM reservation_check_logs WHERE watch_id = %s",
                 (watch_id,),
             )
             connection.execute(
@@ -365,6 +384,69 @@ class PostgresStore(MemoryStore):
             ).fetchall()
 
         return [Alert.model_validate(row) for row in rows]
+
+    def add_check_log(self, log: ReservationCheckLog) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO reservation_check_logs (
+                    log_id,
+                    watch_id,
+                    checked_at,
+                    status,
+                    result_count,
+                    alert_created,
+                    error_message,
+                    top_match_summary
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (log_id) DO NOTHING
+                """,
+                (
+                    log.log_id,
+                    log.watch_id,
+                    log.checked_at,
+                    log.status,
+                    log.result_count,
+                    log.alert_created,
+                    log.error_message,
+                    log.top_match_summary,
+                ),
+            )
+            connection.commit()
+
+    def list_check_logs(
+        self,
+        watch_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> list[ReservationCheckLog]:
+        params: tuple[object, ...] = (limit,)
+        where_clause = ""
+        if watch_id is not None:
+            where_clause = "WHERE watch_id = %s"
+            params = (watch_id, limit)
+
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT
+                    log_id,
+                    watch_id,
+                    checked_at,
+                    status,
+                    result_count,
+                    alert_created,
+                    error_message,
+                    top_match_summary
+                FROM reservation_check_logs
+                {where_clause}
+                ORDER BY checked_at DESC
+                LIMIT %s
+                """,
+                params,
+            ).fetchall()
+
+        return [ReservationCheckLog.model_validate(row) for row in rows]
 
     def has_alerted(self, watch_id: str, result: AvailabilityResult) -> bool:
         alert_key = self._alert_key(watch_id, result)

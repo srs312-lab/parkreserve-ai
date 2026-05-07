@@ -7,6 +7,8 @@ NotificationType = Literal["email", "sms", "both", "push"]
 WatchStatus = Literal["active", "paused"]
 NotificationStatus = Literal["sent", "not_configured", "failed"]
 WatchPriority = Literal["high", "normal", "low"]
+CheckStatus = Literal["success", "failed"]
+RecommendationType = Literal["exact_match", "same_park", "flexible_date"]
 
 
 class WatchReservationRequest(BaseModel):
@@ -68,12 +70,20 @@ class UserPreferences(BaseModel):
     weekend_preferred: bool = False
 
     def to_availability_query(self) -> AvailabilityQuery:
+        date_start = self.date_start
+        date_end = self.date_end
+        if self.flexibility_days:
+            from datetime import timedelta
+
+            date_start = date_start - timedelta(days=self.flexibility_days)
+            date_end = date_end + timedelta(days=self.flexibility_days)
+
         return AvailabilityQuery(
             park_name=self.park_name,
             facility_id=self.facility_id,
             campground_name=self.campground_name,
-            date_start=self.date_start,
-            date_end=self.date_end,
+            date_start=date_start,
+            date_end=date_end,
             camp_type=self.camp_type,
             min_nights=self.min_nights,
         )
@@ -122,6 +132,23 @@ class NextAvailabilityResult(BaseModel):
     nights: int
     site_count: int
     site_types: list[str]
+    reservation_url: str
+
+
+class StrategyRecommendation(BaseModel):
+    recommendation_id: str
+    watch_id: str
+    match_type: RecommendationType
+    park_name: str
+    campground_name: str
+    facility_id: str
+    available_date: date
+    available_end_date: date
+    nights: int
+    site_count: int
+    site_types: list[str]
+    reason: str
+    score: int
     reservation_url: str
 
 
@@ -240,6 +267,17 @@ class Alert(BaseModel):
     nights: Optional[int] = None
     site_type: Optional[str] = None
     deliveries: list[NotificationDelivery] = Field(default_factory=list)
+
+
+class ReservationCheckLog(BaseModel):
+    log_id: str
+    watch_id: str
+    checked_at: datetime
+    status: CheckStatus
+    result_count: int = 0
+    alert_created: bool = False
+    error_message: Optional[str] = None
+    top_match_summary: Optional[str] = None
 
 
 class PauseAgentRequest(BaseModel):

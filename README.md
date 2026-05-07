@@ -38,9 +38,11 @@ The current product scope focuses on Recreation.gov campground inventory. The ar
 - Override email and phone recipients per watch when needed.
 - Track delivery success rate and filter alerts that need retry.
 - Surface watch analytics for hottest campgrounds and latest openings.
+- Log every availability check with success/failure, result counts, and top match summaries.
+- Recommend exact matches, same-park campground alternatives, and flexible-date fallbacks.
 - Protect the deployed dashboard with a password gate and shared backend API token.
 - Provide a public read-only demo dashboard with sample data at `/demo`.
-- Persist watches, alerts, and dedupe keys in Postgres.
+- Persist watches, alerts, dedupe keys, and check logs in Postgres.
 
 ## Screenshots
 
@@ -74,6 +76,7 @@ flowchart TD
     Preference["Preference Agent"]
     Decision["Decision / Ranking Agent"]
     Execution["Execution Agent"]
+    Logs["Check Logs"]
     Recreation["Recreation.gov"]
     Scheduler["APScheduler"]
     Database["PostgreSQL"]
@@ -93,6 +96,7 @@ flowchart TD
     Agent --> Decision
     Decision --> Execution
     Scheduler --> Agent
+    Agent --> Logs
     Execution --> Email
     Execution --> SMS
 ```
@@ -105,7 +109,7 @@ flowchart TD
 | Backend | FastAPI, Pydantic |
 | Availability collector | Recreation.gov HTTP endpoints |
 | Scheduler | APScheduler |
-| Persistence | PostgreSQL with SQLAlchemy/psycopg |
+| Persistence | PostgreSQL with psycopg |
 | Notifications | Resend Email API, Twilio SMS |
 | Local dev | Uvicorn, Next dev server |
 
@@ -201,7 +205,7 @@ Background polling:
 POLL_INTERVAL_SECONDS=60
 ```
 
-This is the normal-priority availability check interval. High-priority watches check every 30 seconds, normal-priority watches check every 60 seconds, and low-priority watches check every 5 minutes. The dashboard auto-refresh interval is separate and currently configured in `frontend/dashboard/app/page.tsx`.
+This is the normal-priority availability check interval. High-priority watches check every 30 seconds, normal-priority watches check every 60 seconds, and low-priority watches check every 5 minutes. Scheduled jobs include jitter so grouped watches do not hit Recreation.gov at the exact same second. The dashboard auto-refresh interval is separate and currently configured in `frontend/dashboard/app/page.tsx`.
 
 Security:
 
@@ -319,6 +323,8 @@ It uses static sample data and keeps real backend calls, watches, and notificati
 - Vercel API proxy injects the backend token server-side, so browser JavaScript never sees it.
 - Scheduler uses per-watch priority intervals instead of forcing every watch to poll aggressively.
 - Alert deduplication prevents repeated notifications for the same campsite/date opening.
+- Check logs record each scheduler/check-now attempt for auditability and debugging.
+- Strategy recommendations turn the monitor into a decision engine with exact, same-park, and flexible-date alternatives.
 - Delivery records track email/SMS success and support retry for failed channels.
 - Auto-booking is intentionally not implemented; the product alerts users without completing purchases.
 
@@ -338,7 +344,9 @@ For a portfolio recording or live walkthrough, use the full script in [docs/demo
 10. Create the batch watch.
 11. Use group-level check now to trigger an immediate Recreation.gov lookup.
 12. Open next-available dates to show fallback inventory discovery.
-13. Pause, resume, edit, or delete a group to demonstrate operational controls.
+13. Load strategy recommendations to show exact, same-park, and flexible-date alternatives.
+14. Review check history to prove the scheduler is logging each availability attempt.
+15. Pause, resume, edit, or delete a group to demonstrate operational controls.
 
 ## API Reference
 
@@ -356,8 +364,10 @@ For a portfolio recording or live walkthrough, use the full script in [docs/demo
 | `POST` | `/resume-agent` | Resume a watch and reschedule polling. |
 | `POST` | `/watches/{watch_id}/check-now` | Run an immediate availability check. |
 | `GET` | `/watches/{watch_id}/next-available` | Find upcoming grouped availability windows. |
+| `GET` | `/watches/{watch_id}/recommendations` | Generate exact, same-park, and flexible-date strategy recommendations. |
 | `GET` | `/alerts` | List generated alerts, optionally filtered by watch. |
 | `POST` | `/alerts/{alert_id}/retry-delivery` | Retry failed or missing alert deliveries. |
+| `GET` | `/check-logs` | List recent availability check attempts. |
 | `GET` | `/scheduler/jobs` | Inspect active polling jobs and next run times. |
 | `GET` | `/settings/status` | Show safe runtime config and alert integration status. |
 | `GET` | `/db/status` | Confirm the active persistence backend. |
@@ -403,11 +413,12 @@ On startup, the backend creates these Postgres tables when needed:
 - `reservation_watches`
 - `reservation_alerts`
 - `reservation_alert_keys`
+- `reservation_check_logs`
 
 Alert deduplication uses:
 
 ```text
-watch_id + facility_id + campsite_id + available_date
+watch_id + facility_id + campsite_id + available_date + available_end_date
 ```
 
 This prevents repeated notifications for the same campsite opening while still allowing new dates or sites to alert normally.
@@ -425,10 +436,9 @@ This prevents repeated notifications for the same campsite opening while still a
 - Add account login and multi-user watch ownership.
 - Add push notifications.
 - Add Redis-backed distributed polling.
-- Add fallback recommendations across nearby parks and campgrounds.
 - Add permit and timed-entry inventory sources.
 - Add richer trend charts for alert volume and campground demand.
-- Add a portfolio case study page with product decisions and screenshots.
+- Add nearby-park geographic recommendations beyond same-park alternatives.
 
 ## Resume Bullet
 

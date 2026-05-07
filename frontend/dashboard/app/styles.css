@@ -103,7 +103,7 @@ h2 {
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
   margin-bottom: 18px;
 }
@@ -163,7 +163,7 @@ h2 {
 }
 
 .statusGrid {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
 .analyticsGrid {
@@ -753,6 +753,92 @@ button:disabled {
   font-size: 12px;
 }
 
+.recommendations {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--line);
+  background: #fbfcfb;
+}
+
+.recommendationHeader,
+.checkLogMeta,
+.recommendationMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.recommendationHeader {
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.recommendation {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.recommendation:hover {
+  border-color: var(--accent);
+}
+
+.recommendation strong {
+  font-size: 13px;
+}
+
+.recommendation p {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.recommendationMeta span,
+.checkLogMeta span:not(.delivery) {
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.checkLogList {
+  display: grid;
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.checkLogItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.checkLogItem p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.checkLogMeta {
+  justify-content: flex-end;
+}
+
 .compact {
   padding: 4px 0;
 }
@@ -938,6 +1024,7 @@ button:disabled {
 
   .topbar,
   .row,
+  .checkLogItem,
   .watchGroupHeader,
   .alertItem {
     align-items: flex-start;
@@ -962,11 +1049,16 @@ button:disabled {
   }
 
   .groupCounts,
+  .checkLogMeta,
   .groupActions {
     justify-content: flex-start;
   }
 
   .editWatch {
+    grid-template-columns: 1fr;
+  }
+
+  .checkLogItem {
     grid-template-columns: 1fr;
   }
 

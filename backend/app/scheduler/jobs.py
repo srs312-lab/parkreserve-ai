@@ -8,6 +8,7 @@ from app.schemas.reservations import WatchPriority
 scheduler = AsyncIOScheduler()
 MIN_HIGH_PRIORITY_INTERVAL_SECONDS = 30
 LOW_PRIORITY_MULTIPLIER = 5
+MAX_JITTER_SECONDS = 60
 
 
 def start_scheduler() -> None:
@@ -32,6 +33,7 @@ def schedule_watch_job(
         args=[watch_id],
         trigger="interval",
         seconds=watch_check_interval_seconds(priority),
+        jitter=watch_check_jitter_seconds(priority),
         id=f"watch:{watch_id}",
         replace_existing=True,
         max_instances=1,
@@ -47,6 +49,13 @@ def watch_check_interval_seconds(priority: WatchPriority = "normal") -> int:
     if priority == "low":
         return base_interval_seconds * LOW_PRIORITY_MULTIPLIER
     return base_interval_seconds
+
+
+def watch_check_jitter_seconds(priority: WatchPriority = "normal") -> int:
+    interval_seconds = watch_check_interval_seconds(priority)
+    if priority == "high":
+        return max(1, min(10, interval_seconds // 5))
+    return max(1, min(MAX_JITTER_SECONDS, interval_seconds // 5))
 
 
 def pause_watch_job(watch_id: str) -> None:

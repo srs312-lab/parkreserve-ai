@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  Activity,
   Bell,
   CalendarDays,
+  Compass,
   Database,
   Pause,
   Pencil,
@@ -145,6 +147,34 @@ type NextAvailability = {
   reservation_url: string;
 };
 
+type StrategyRecommendation = {
+  recommendation_id: string;
+  watch_id: string;
+  match_type: "exact_match" | "same_park" | "flexible_date";
+  park_name: string;
+  campground_name: string;
+  facility_id: string;
+  available_date: string;
+  available_end_date: string;
+  nights: number;
+  site_count: number;
+  site_types: string[];
+  reason: string;
+  score: number;
+  reservation_url: string;
+};
+
+type ReservationCheckLog = {
+  log_id: string;
+  watch_id: string;
+  checked_at: string;
+  status: "success" | "failed";
+  result_count: number;
+  alert_created: boolean;
+  error_message: string | null;
+  top_match_summary: string | null;
+};
+
 type WatchEditDraft = {
   date_start: string;
   date_end: string;
@@ -197,6 +227,7 @@ type DeleteTarget =
 export default function Dashboard() {
   const [watches, setWatches] = useState<Watch[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [checkLogs, setCheckLogs] = useState<ReservationCheckLog[]>([]);
   const [alertWatchFilter, setAlertWatchFilter] = useState("all");
   const [alertDeliveryFilter, setAlertDeliveryFilter] =
     useState<AlertDeliveryFilter>("all");
@@ -207,6 +238,12 @@ export default function Dashboard() {
     {},
   );
   const [nextLoadingWatch, setNextLoadingWatch] = useState<string | null>(null);
+  const [recommendations, setRecommendations] = useState<
+    Record<string, StrategyRecommendation[]>
+  >({});
+  const [recommendationLoadingKey, setRecommendationLoadingKey] = useState<
+    string | null
+  >(null);
   const [editingWatchId, setEditingWatchId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<WatchEditDraft | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
@@ -322,6 +359,29 @@ export default function Dashboard() {
         return groupedAlerts;
       }, {});
   }, [alerts]);
+  const checkLogsByWatchId = useMemo(() => {
+    return [...checkLogs]
+      .sort(
+        (left, right) =>
+          new Date(right.checked_at).getTime() -
+          new Date(left.checked_at).getTime(),
+      )
+      .reduce<Record<string, ReservationCheckLog[]>>((groupedLogs, log) => {
+        groupedLogs[log.watch_id] = groupedLogs[log.watch_id] ?? [];
+        groupedLogs[log.watch_id].push(log);
+        return groupedLogs;
+      }, {});
+  }, [checkLogs]);
+  const failedCheckCount = useMemo(
+    () => checkLogs.filter((log) => log.status === "failed").length,
+    [checkLogs],
+  );
+  const watchLabelById = useMemo(() => {
+    return watches.reduce<Record<string, string>>((labels, watch) => {
+      labels[watch.watch_id] = watch.campground_name ?? watch.park_name;
+      return labels;
+    }, {});
+  }, [watches]);
   const watchAnalytics = useMemo(() => {
     const watchItems = watches
       .map<WatchAnalyticsItem>((watch) => {
@@ -500,12 +560,14 @@ export default function Dashboard() {
   }, []);
 
   const refreshData = useCallback(async function refreshData() {
-    const [watchData, alertData, jobData, settingsData] = await Promise.all([
-      fetchJson<Watch[]>("/watches"),
-      fetchJson<Alert[]>("/alerts"),
-      fetchJson<SchedulerJob[]>("/scheduler/jobs"),
-      fetchJson<SettingsStatus>("/settings/status"),
-    ]);
+    const [watchData, alertData, checkLogData, jobData, settingsData] =
+      await Promise.all([
+        fetchJson<Watch[]>("/watches"),
+        fetchJson<Alert[]>("/alerts"),
+        fetchJson<ReservationCheckLog[]>("/check-logs?limit=100"),
+        fetchJson<SchedulerJob[]>("/scheduler/jobs"),
+        fetchJson<SettingsStatus>("/settings/status"),
+      ]);
     setWatches(
       watchData.map((watch) => ({
         ...watch,
@@ -515,6 +577,7 @@ export default function Dashboard() {
       })),
     );
     setAlerts(alertData);
+    setCheckLogs(checkLogData);
     setJobs(jobData);
     setSettingsStatus(settingsData);
     setDbStore(settingsData.store);
@@ -976,6 +1039,71 @@ export default function Dashboard() {
     }
   }
 
+  async function loadRecommendationsForWatch(watchId: string) {
+    setRecommendationLoadingKey(watchId);
+    setNotice("");
+    try {
+      const watchRecommendations = await fetchJson<StrategyRecommendation[]>(
+        `/watches/${watchId}/recommendations?days=90&limit=6`,
+      );
+      setRecommendations((current) => ({
+        ...current,
+        [watchId]: watchRecommendations,
+      }));
+      setNotice(
+        watchRecommendations.length
+          ? "Strategy recommendations loaded."
+          : "No strategy recommendations found.",
+      );
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Recommendation lookup failed.");
+    } finally {
+      setRecommendationLoadingKey(null);
+    }
+  }
+
+  async function loadRecommendationsForGroup(group: WatchGroup) {
+    const loadingKey = `group:${group.key}`;
+    setBusy(true);
+    setRecommendationLoadingKey(loadingKey);
+    setNotice("");
+    try {
+      const results = await Promise.all(
+        group.watches.map(async (watch) => ({
+          watchId: watch.watch_id,
+          recommendations: await fetchJson<StrategyRecommendation[]>(
+            `/watches/${watch.watch_id}/recommendations?days=90&limit=6`,
+          ),
+        })),
+      );
+
+      setRecommendations((current) => {
+        const next = { ...current };
+        results.forEach((result) => {
+          next[result.watchId] = result.recommendations;
+        });
+        return next;
+      });
+
+      const recommendationCount = results.reduce(
+        (count, result) => count + result.recommendations.length,
+        0,
+      );
+      setNotice(
+        recommendationCount
+          ? `Loaded ${recommendationCount} recommendation${
+              recommendationCount === 1 ? "" : "s"
+            }.`
+          : "No strategy recommendations found for this group.",
+      );
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Group recommendation lookup failed.");
+    } finally {
+      setRecommendationLoadingKey(null);
+      setBusy(false);
+    }
+  }
+
   useEffect(() => {
     refreshData().catch((error) => {
       setNotice(error instanceof Error ? error.message : "Refresh failed.");
@@ -1033,6 +1161,7 @@ export default function Dashboard() {
       <section className="metrics">
         <Metric icon={<CalendarDays size={18} />} label="Active Watches" value={activeCount} />
         <Metric icon={<Bell size={18} />} label="Alerts" value={alerts.length} />
+        <Metric icon={<Activity size={18} />} label="Checks" value={checkLogs.length} />
         <Metric
           icon={<TrendingUp size={18} />}
           label="Hot Watches"
@@ -1098,6 +1227,14 @@ export default function Dashboard() {
             label="Base check"
             ok={Boolean(settingsStatus)}
             value="normal priority"
+          />
+          <StatusItem
+            detail={`${checkLogs.length} recent check${
+              checkLogs.length === 1 ? "" : "s"
+            }`}
+            label="Check logs"
+            ok={!failedCheckCount}
+            value={failedCheckCount ? `${failedCheckCount} failed` : "healthy"}
           />
           <StatusItem
             detail={`${AUTO_REFRESH_INTERVAL_MS / 1000}s`}
@@ -1519,6 +1656,16 @@ export default function Dashboard() {
                       </button>
                       <button
                         className="iconOnly"
+                        title="Load strategy recommendations for group"
+                        onClick={() => loadRecommendationsForGroup(group)}
+                        disabled={
+                          busy || recommendationLoadingKey === `group:${group.key}`
+                        }
+                      >
+                        <Compass size={16} />
+                      </button>
+                      <button
+                        className="iconOnly"
                         title="Check group now"
                         onClick={() => checkGroupNow(group)}
                         disabled={busy || group.activeCount === 0}
@@ -1563,6 +1710,20 @@ export default function Dashboard() {
                                   )}`
                                 : "No availability check yet"}
                             </span>
+                            {checkLogsByWatchId[watch.watch_id]?.[0] ? (
+                              <span>
+                                Check{" "}
+                                {formatCheckStatus(
+                                  checkLogsByWatchId[watch.watch_id][0].status,
+                                )}{" "}
+                                · {checkLogsByWatchId[watch.watch_id][0].result_count}{" "}
+                                result
+                                {checkLogsByWatchId[watch.watch_id][0]
+                                  .result_count === 1
+                                  ? ""
+                                  : "s"}
+                              </span>
+                            ) : null}
                             <span>
                               {nextCheckByWatchId[watch.watch_id]
                                 ? `Next availability check ${formatDateTime(
@@ -1613,6 +1774,14 @@ export default function Dashboard() {
                             disabled={nextLoadingWatch === watch.watch_id}
                           >
                             <CalendarDays size={17} />
+                          </button>
+                          <button
+                            className="iconOnly"
+                            title="Load strategy recommendations"
+                            onClick={() => loadRecommendationsForWatch(watch.watch_id)}
+                            disabled={recommendationLoadingKey === watch.watch_id}
+                          >
+                            <Compass size={17} />
                           </button>
                           <button
                             className="iconOnly"
@@ -1807,6 +1976,54 @@ export default function Dashboard() {
                           )}
                         </div>
                       ) : null}
+                      {recommendations[watch.watch_id] ? (
+                        <div className="recommendations">
+                          <div className="recommendationHeader">
+                            <span>Strategy recommendations</span>
+                            <span>{recommendations[watch.watch_id].length} found</span>
+                          </div>
+                          {recommendations[watch.watch_id].length ? (
+                            recommendations[watch.watch_id].map((recommendation) => (
+                              <a
+                                className="recommendation"
+                                href={recommendation.reservation_url}
+                                key={recommendation.recommendation_id}
+                                rel="noreferrer"
+                                target="_blank"
+                              >
+                                <div>
+                                  <strong>{recommendation.campground_name}</strong>
+                                  <p>{recommendation.reason}</p>
+                                </div>
+                                <div className="recommendationMeta">
+                                  <span>
+                                    {formatRecommendationType(
+                                      recommendation.match_type,
+                                    )}
+                                  </span>
+                                  <span>
+                                    {recommendation.available_date} to{" "}
+                                    {recommendation.available_end_date}
+                                  </span>
+                                  <span>
+                                    {recommendation.nights} night
+                                    {recommendation.nights === 1 ? "" : "s"}
+                                  </span>
+                                  <span>
+                                    {recommendation.site_count} site
+                                    {recommendation.site_count === 1 ? "" : "s"}
+                                  </span>
+                                  <span>score {recommendation.score}</span>
+                                </div>
+                              </a>
+                            ))
+                          ) : (
+                            <p className="empty compact">
+                              No strategy recommendations found.
+                            </p>
+                          )}
+                        </div>
+                      ) : null}
                       <WatchAlertHistory alerts={alertsByWatchId[watch.watch_id] ?? []} />
                     </div>
                   ))}
@@ -1910,6 +2127,43 @@ export default function Dashboard() {
           ))}
           {!filteredAlerts.length ? (
             <p className="empty">No alerts for the selected watches.</p>
+          ) : null}
+        </div>
+      </section>
+      <section className="panel">
+        <div className="panelHeader">
+          <h2>Check History</h2>
+          <span>
+            {checkLogs.length} recent check{checkLogs.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <div className="checkLogList">
+          {checkLogs.slice(0, 25).map((log) => (
+            <article className="checkLogItem" key={log.log_id}>
+              <div>
+                <strong>{watchLabelById[log.watch_id] ?? log.watch_id}</strong>
+                <p>
+                  {log.top_match_summary ??
+                    log.error_message ??
+                    "No matching availability found."}
+                </p>
+              </div>
+              <div className="checkLogMeta">
+                <span className={`delivery ${log.status === "success" ? "sent" : "failed"}`}>
+                  {formatCheckStatus(log.status)}
+                </span>
+                <span>{formatDateTimeWithSeconds(log.checked_at)}</span>
+                <span>
+                  {log.result_count} result{log.result_count === 1 ? "" : "s"}
+                </span>
+                {log.alert_created ? <span>alert sent</span> : null}
+              </div>
+            </article>
+          ))}
+          {!checkLogs.length ? (
+            <p className="empty">
+              Check history will appear after the scheduler or Check now runs.
+            </p>
           ) : null}
         </div>
       </section>
@@ -2139,6 +2393,25 @@ function prioritySortRank(priority: WatchPriority) {
     return 1;
   }
   return 2;
+}
+
+function formatRecommendationType(
+  matchType: StrategyRecommendation["match_type"],
+) {
+  if (matchType === "exact_match") {
+    return "exact match";
+  }
+  if (matchType === "same_park") {
+    return "same park";
+  }
+  return "flexible date";
+}
+
+function formatCheckStatus(status: ReservationCheckLog["status"]) {
+  if (status === "success") {
+    return "success";
+  }
+  return "failed";
 }
 
 function formatDateTime(value: string | null | undefined) {

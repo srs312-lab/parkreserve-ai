@@ -1,6 +1,8 @@
 import {
+  Activity,
   Bell,
   CalendarDays,
+  Compass,
   Database,
   Lock,
   Pause,
@@ -83,6 +85,54 @@ const demoAlerts = [
   },
 ];
 
+const demoRecommendations = [
+  {
+    campground: "Upper Pines",
+    reason: "Matches the selected watch window and filters.",
+    score: 104,
+    type: "exact match",
+    window: "2026-06-11 to 2026-06-12",
+  },
+  {
+    campground: "Wawona",
+    reason: "Same-park campground alternative inside the selected window.",
+    score: 80,
+    type: "same park",
+    window: "2026-06-10 to 2026-06-12",
+  },
+  {
+    campground: "Upper Pines",
+    reason: "Same campground outside the selected window within 90 days.",
+    score: 59,
+    type: "flexible date",
+    window: "2026-06-17 to 2026-06-18",
+  },
+];
+
+const demoCheckLogs = [
+  {
+    checkedAt: "May 6, 2:14:22 PM",
+    campground: "Upper Pines",
+    resultCount: 3,
+    status: "success",
+    summary: "Upper Pines site 042 for 1 night from 2026-06-11 to 2026-06-12.",
+  },
+  {
+    checkedAt: "May 6, 2:14:18 PM",
+    campground: "Lower Pines",
+    resultCount: 1,
+    status: "success",
+    summary: "Lower Pines site 018 for 2 nights from 2026-06-10 to 2026-06-12.",
+  },
+  {
+    checkedAt: "May 6, 2:13:57 PM",
+    campground: "North Pines",
+    resultCount: 0,
+    status: "success",
+    summary: "No matching availability found.",
+  },
+];
+
 export default function DemoDashboard() {
   return (
     <main className="shell">
@@ -108,6 +158,7 @@ export default function DemoDashboard() {
       <section className="metrics">
         <Metric icon={<CalendarDays size={18} />} label="Active Watches" value={2} />
         <Metric icon={<Bell size={18} />} label="Alerts" value={4} />
+        <Metric icon={<Activity size={18} />} label="Checks" value={3} />
         <Metric icon={<TrendingUp size={18} />} label="Hot Watches" value={2} />
         <Metric icon={<ShieldCheck size={18} />} label="Delivery Health" value="100%" />
         <Metric icon={<Play size={18} />} label="Scheduled Jobs" value={2} />
@@ -133,6 +184,7 @@ export default function DemoDashboard() {
           <StatusItem detail="demo@example.com" label="Email" ok value="configured" />
           <StatusItem detail="***-***-5120" label="SMS" ok value="configured" />
           <StatusItem detail="60s" label="Base check" ok value="normal priority" />
+          <StatusItem detail="3 recent checks" label="Check logs" ok value="healthy" />
           <StatusItem detail="30s" label="Refresh" ok value="dashboard" />
           <StatusItem detail="private backend locked" label="API auth" ok value="protected" />
           <StatusItem detail="public search" label="RIDB" ok value="optional" />
@@ -251,6 +303,26 @@ export default function DemoDashboard() {
                   </article>
                 ))}
               </div>
+              <div className="recommendations">
+                <div className="recommendationHeader">
+                  <span>Strategy recommendations</span>
+                  <span>{demoRecommendations.length} found</span>
+                </div>
+                {demoRecommendations.map((recommendation) => (
+                  <div className="recommendation" key={`${recommendation.type}-${recommendation.window}`}>
+                    <div>
+                      <strong>{recommendation.campground}</strong>
+                      <p>{recommendation.reason}</p>
+                    </div>
+                    <div className="recommendationMeta">
+                      <span>{recommendation.type}</span>
+                      <span>{recommendation.window}</span>
+                      <span>1+ night</span>
+                      <span>score {recommendation.score}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </section>
           </div>
         </section>
@@ -299,6 +371,29 @@ export default function DemoDashboard() {
           ))}
         </div>
       </section>
+      <section className="panel">
+        <div className="panelHeader">
+          <h2>Check History</h2>
+          <span>{demoCheckLogs.length} recent checks</span>
+        </div>
+        <div className="checkLogList">
+          {demoCheckLogs.map((log) => (
+            <article className="checkLogItem" key={`${log.campground}-${log.checkedAt}`}>
+              <div>
+                <strong>{log.campground}</strong>
+                <p>{log.summary}</p>
+              </div>
+              <div className="checkLogMeta">
+                <span className="delivery sent">{log.status}</span>
+                <span>{log.checkedAt}</span>
+                <span>
+                  {log.resultCount} result{log.resultCount === 1 ? "" : "s"}
+                </span>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
     </main>
   );
 }
@@ -314,6 +409,12 @@ function DisabledActions({ compact = false }: { compact?: boolean }) {
       </button>
       <button className="iconOnly" disabled title="Edit" type="button">
         <Pencil size={compact ? 17 : 16} />
+      </button>
+      <button className="iconOnly" disabled title="Find next available dates" type="button">
+        <CalendarDays size={compact ? 17 : 16} />
+      </button>
+      <button className="iconOnly" disabled title="Load strategy recommendations" type="button">
+        <Compass size={compact ? 17 : 16} />
       </button>
       <button className="iconOnly" disabled title="Check now" type="button">
         <RefreshCw size={compact ? 17 : 16} />

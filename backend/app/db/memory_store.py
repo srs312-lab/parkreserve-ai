@@ -6,6 +6,7 @@ from app.schemas.reservations import (
     Alert,
     AvailabilityResult,
     NotificationDelivery,
+    ReservationCheckLog,
     UserPreferences,
     Watch,
 )
@@ -16,6 +17,7 @@ class MemoryStore:
         self.watches: dict[str, Watch] = {}
         self.alerts: list[Alert] = []
         self.alert_keys: set[str] = set()
+        self.check_logs: list[ReservationCheckLog] = []
 
     def create_watch(self, preferences: UserPreferences) -> Watch:
         watch = Watch(
@@ -91,6 +93,20 @@ class MemoryStore:
         if watch_id is None:
             return self.alerts
         return [alert for alert in self.alerts if alert.watch_id == watch_id]
+
+    def add_check_log(self, log: ReservationCheckLog) -> None:
+        self.check_logs.append(log)
+
+    def list_check_logs(
+        self,
+        watch_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> list[ReservationCheckLog]:
+        logs = self.check_logs
+        if watch_id is not None:
+            logs = [log for log in logs if log.watch_id == watch_id]
+
+        return sorted(logs, key=lambda log: log.checked_at, reverse=True)[:limit]
 
     def has_alerted(self, watch_id: str, result: AvailabilityResult) -> bool:
         return self._alert_key(watch_id, result) in self.alert_keys

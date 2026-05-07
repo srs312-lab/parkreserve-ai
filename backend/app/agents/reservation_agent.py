@@ -1,5 +1,6 @@
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
+from uuid import uuid4
 
 from app.agents.decision_agent import DecisionAgent
 from app.agents.execution_agent import ExecutionAgent
@@ -12,6 +13,8 @@ from app.schemas.reservations import (
     CampgroundSearchResult,
     NextAvailabilityResult,
     ParkSearchResult,
+    ReservationCheckLog,
+    StrategyRecommendation,
     Watch,
     WatchReservationRequest,
 )
@@ -35,26 +38,59 @@ class ReservationAgent:
         if watch is None or watch.status != "active":
             return []
 
-        results = await self.search_agent.search(watch.preferences.to_availability_query())
-        ranked_results = self.decision_agent.rank(results, watch.preferences)
+        checked_at = datetime.now(timezone.utc)
+        try:
+            results = await self.search_agent.search(
+                watch.preferences.to_availability_query()
+            )
+            ranked_results = self.decision_agent.rank(results, watch.preferences)
 
-        new_results = [
-            result
-            for result in ranked_results
-            if not store.has_alerted(watch.watch_id, result)
-        ]
+            new_results = [
+                result
+                for result in ranked_results
+                if not store.has_alerted(watch.watch_id, result)
+            ]
 
-        if new_results:
-            alert = self.execution_agent.create_alert(watch, new_results[0])
-            deliveries = await self.execution_agent.send_notifications(watch, alert)
-            alert = alert.model_copy(update={"deliveries": deliveries})
-            store.add_alert(alert)
+            alert_created = False
+            if new_results:
+                alert = self.execution_agent.create_alert(watch, new_results[0])
+                deliveries = await self.execution_agent.send_notifications(watch, alert)
+                alert = alert.model_copy(update={"deliveries": deliveries})
+                store.add_alert(alert)
+                alert_created = True
 
-        for result in ranked_results:
-            store.mark_alerted(watch.watch_id, result)
+            for result in ranked_results:
+                store.mark_alerted(watch.watch_id, result)
 
-        store.mark_watch_checked(watch.watch_id, datetime.now(timezone.utc))
-        return ranked_results
+            store.add_check_log(
+                ReservationCheckLog(
+                    log_id=str(uuid4()),
+                    watch_id=watch.watch_id,
+                    checked_at=checked_at,
+                    status="success",
+                    result_count=len(ranked_results),
+                    alert_created=alert_created,
+                    top_match_summary=(
+                        _top_match_summary(ranked_results[0])
+                        if ranked_results
+                        else "No matching availability found."
+                    ),
+                )
+            )
+            store.mark_watch_checked(watch.watch_id, checked_at)
+            return ranked_results
+        except Exception as error:
+            store.add_check_log(
+                ReservationCheckLog(
+                    log_id=str(uuid4()),
+                    watch_id=watch.watch_id,
+                    checked_at=checked_at,
+                    status="failed",
+                    error_message=str(error),
+                )
+            )
+            store.mark_watch_checked(watch.watch_id, checked_at)
+            raise
 
     async def check_availability(
         self,
@@ -100,6 +136,117 @@ class ReservationAgent:
         results = await self.search_agent.search(query)
         grouped = _group_next_availability(results)
         return grouped[:limit]
+
+    async def recommend_watch_strategy(
+        self,
+        watch_id: str,
+        days: int = 90,
+        limit: int = 6,
+    ) -> list[StrategyRecommendation]:
+        watch = store.get_watch(watch_id)
+        if watch is None:
+            return []
+
+        recommendations: list[StrategyRecommendation] = []
+        seen_keys: set[tuple[str, date, date, int]] = set()
+
+        exact_results = await self.search_agent.search(
+            watch.preferences.to_availability_query()
+        )
+        exact_openings = _group_next_availability(
+            self.decision_agent.rank(exact_results, watch.preferences)
+        )
+        recommendations.extend(
+            _strategy_recommendations(
+                watch_id,
+                exact_openings,
+                "exact_match",
+                "Matches the selected watch window and filters.",
+                100,
+                seen_keys,
+                limit - len(recommendations),
+            )
+        )
+
+        if len(recommendations) < limit:
+            same_park_results: list[AvailabilityResult] = []
+            campgrounds = await self.search_agent.search_campgrounds(
+                watch.preferences.park_name,
+                limit=8,
+            )
+            for campground in campgrounds:
+                if campground.facility_id == watch.preferences.facility_id:
+                    continue
+                try:
+                    same_park_results.extend(
+                        await self.search_agent.search(
+                            watch.preferences.to_availability_query().model_copy(
+                                update={
+                                    "facility_id": campground.facility_id,
+                                    "campground_name": campground.name,
+                                }
+                            )
+                        )
+                    )
+                except Exception:
+                    continue
+
+            same_park_openings = _group_next_availability(
+                self.decision_agent.rank(same_park_results, watch.preferences)
+            )
+            recommendations.extend(
+                _strategy_recommendations(
+                    watch_id,
+                    same_park_openings,
+                    "same_park",
+                    "Same-park campground alternative inside the selected window.",
+                    75,
+                    seen_keys,
+                    limit - len(recommendations),
+                )
+            )
+
+        if len(recommendations) < limit:
+            search_start = date.today()
+            search_end = search_start + timedelta(days=days)
+            flexible_results = await self.search_agent.search(
+                watch.preferences.to_availability_query().model_copy(
+                    update={
+                        "date_start": search_start,
+                        "date_end": search_end,
+                    }
+                )
+            )
+            flexible_openings = [
+                opening
+                for opening in _group_next_availability(
+                    self.decision_agent.rank(flexible_results, watch.preferences)
+                )
+                if (
+                    opening.available_date < watch.preferences.date_start
+                    or opening.available_date > watch.preferences.date_end
+                )
+            ]
+            recommendations.extend(
+                _strategy_recommendations(
+                    watch_id,
+                    flexible_openings,
+                    "flexible_date",
+                    f"Same campground outside the selected window within {days} days.",
+                    55,
+                    seen_keys,
+                    limit - len(recommendations),
+                )
+            )
+
+        return sorted(
+            recommendations,
+            key=lambda recommendation: (
+                -recommendation.score,
+                recommendation.available_date,
+                recommendation.campground_name,
+            ),
+        )[:limit]
 
 
 def _group_next_availability(
@@ -152,4 +299,64 @@ def _group_next_availability(
             -opening.nights,
             opening.campground_name,
         ),
+    )
+
+
+def _strategy_recommendations(
+    watch_id: str,
+    openings: list[NextAvailabilityResult],
+    match_type: str,
+    reason: str,
+    base_score: int,
+    seen_keys: set[tuple[str, date, date, int]],
+    limit: int,
+) -> list[StrategyRecommendation]:
+    recommendations: list[StrategyRecommendation] = []
+    for opening in openings:
+        key = (
+            opening.facility_id,
+            opening.available_date,
+            opening.available_end_date,
+            opening.nights,
+        )
+        if key in seen_keys:
+            continue
+
+        seen_keys.add(key)
+        recommendations.append(
+            StrategyRecommendation(
+                recommendation_id=":".join(
+                    [
+                        match_type,
+                        opening.facility_id,
+                        opening.available_date.isoformat(),
+                        str(opening.nights),
+                    ]
+                ),
+                watch_id=watch_id,
+                match_type=match_type,
+                park_name=opening.park_name,
+                campground_name=opening.campground_name,
+                facility_id=opening.facility_id,
+                available_date=opening.available_date,
+                available_end_date=opening.available_end_date,
+                nights=opening.nights,
+                site_count=opening.site_count,
+                site_types=opening.site_types,
+                reason=reason,
+                score=base_score + min(opening.site_count, 10) + opening.nights,
+                reservation_url=opening.reservation_url,
+            )
+        )
+        if len(recommendations) >= limit:
+            break
+
+    return recommendations
+
+
+def _top_match_summary(result: AvailabilityResult) -> str:
+    return (
+        f"{result.campground_name} site {result.site} for {result.nights} "
+        f"night{'' if result.nights == 1 else 's'} from "
+        f"{result.available_date} to {result.available_end_date}."
     )

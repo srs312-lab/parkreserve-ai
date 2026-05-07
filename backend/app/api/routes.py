@@ -30,7 +30,9 @@ from app.schemas.reservations import (
     NotificationDelivery,
     ParkSearchResult,
     PauseAgentRequest,
+    ReservationCheckLog,
     SettingsStatus,
+    StrategyRecommendation,
     TestAlertRequest,
     TestAlertResponse,
     UserPreferences,
@@ -151,6 +153,17 @@ async def search_parks(
 @router.get("/alerts", response_model=list[Alert])
 def get_alerts(watch_id: Optional[str] = None) -> list[Alert]:
     return store.list_alerts(watch_id=watch_id)
+
+
+@router.get("/check-logs", response_model=list[ReservationCheckLog])
+def get_check_logs(
+    watch_id: Optional[str] = None,
+    limit: int = 100,
+) -> list[ReservationCheckLog]:
+    return store.list_check_logs(
+        watch_id=watch_id,
+        limit=max(1, min(limit, 250)),
+    )
 
 
 @router.post("/alerts/{alert_id}/retry-delivery", response_model=Alert)
@@ -434,6 +447,26 @@ async def get_next_available(
         raise HTTPException(status_code=404, detail="Watch not found.")
 
     return await agent.find_next_available(watch_id, days=days, limit=limit)
+
+
+@router.get(
+    "/watches/{watch_id}/recommendations",
+    response_model=list[StrategyRecommendation],
+)
+async def get_watch_recommendations(
+    watch_id: str,
+    days: int = 90,
+    limit: int = 6,
+) -> list[StrategyRecommendation]:
+    watch = store.get_watch(watch_id)
+    if watch is None:
+        raise HTTPException(status_code=404, detail="Watch not found.")
+
+    return await agent.recommend_watch_strategy(
+        watch_id,
+        days=max(1, min(days, 180)),
+        limit=max(1, min(limit, 12)),
+    )
 
 
 @router.get("/scheduler/jobs")
