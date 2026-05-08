@@ -4,8 +4,10 @@ import {
   Activity,
   Bell,
   CalendarDays,
+  CheckCircle2,
   Compass,
   Database,
+  ExternalLink,
   Pause,
   Pencil,
   Play,
@@ -175,6 +177,32 @@ type ReservationCheckLog = {
   top_match_summary: string | null;
 };
 
+type BookingIntentStatus =
+  | "created"
+  | "opened"
+  | "user_confirmed"
+  | "abandoned";
+
+type BookingIntent = {
+  booking_intent_id: string;
+  alert_id: string;
+  watch_id: string;
+  status: BookingIntentStatus;
+  handoff_url: string;
+  created_at: string;
+  updated_at: string;
+  park_name: string;
+  campground_name: string | null;
+  facility_id: string | null;
+  campsite_id: string | null;
+  site: string | null;
+  available_date: string | null;
+  available_end_date: string | null;
+  nights: number | null;
+  site_type: string | null;
+  note: string;
+};
+
 type WatchEditDraft = {
   date_start: string;
   date_end: string;
@@ -228,6 +256,7 @@ export default function Dashboard() {
   const [watches, setWatches] = useState<Watch[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [checkLogs, setCheckLogs] = useState<ReservationCheckLog[]>([]);
+  const [bookingIntents, setBookingIntents] = useState<BookingIntent[]>([]);
   const [alertWatchFilter, setAlertWatchFilter] = useState("all");
   const [alertDeliveryFilter, setAlertDeliveryFilter] =
     useState<AlertDeliveryFilter>("all");
@@ -266,6 +295,12 @@ export default function Dashboard() {
     null,
   );
   const [retryingAlertId, setRetryingAlertId] = useState<string | null>(null);
+  const [bookingIntentBusyAlertId, setBookingIntentBusyAlertId] = useState<
+    string | null
+  >(null);
+  const [bookingStatusBusyId, setBookingStatusBusyId] = useState<string | null>(
+    null,
+  );
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [nextRefreshAt, setNextRefreshAt] = useState<string | null>(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
@@ -382,6 +417,15 @@ export default function Dashboard() {
       return labels;
     }, {});
   }, [watches]);
+  const bookingIntentByAlertId = useMemo(() => {
+    return bookingIntents.reduce<Record<string, BookingIntent>>(
+      (intentsByAlertId, intent) => {
+        intentsByAlertId[intent.alert_id] = intent;
+        return intentsByAlertId;
+      },
+      {},
+    );
+  }, [bookingIntents]);
   const watchAnalytics = useMemo(() => {
     const watchItems = watches
       .map<WatchAnalyticsItem>((watch) => {
@@ -560,11 +604,19 @@ export default function Dashboard() {
   }, []);
 
   const refreshData = useCallback(async function refreshData() {
-    const [watchData, alertData, checkLogData, jobData, settingsData] =
+    const [
+      watchData,
+      alertData,
+      checkLogData,
+      bookingIntentData,
+      jobData,
+      settingsData,
+    ] =
       await Promise.all([
         fetchJson<Watch[]>("/watches"),
         fetchJson<Alert[]>("/alerts"),
         fetchJson<ReservationCheckLog[]>("/check-logs?limit=100"),
+        fetchJson<BookingIntent[]>("/booking-intents?limit=100"),
         fetchJson<SchedulerJob[]>("/scheduler/jobs"),
         fetchJson<SettingsStatus>("/settings/status"),
       ]);
@@ -578,6 +630,7 @@ export default function Dashboard() {
     );
     setAlerts(alertData);
     setCheckLogs(checkLogData);
+    setBookingIntents(bookingIntentData);
     setJobs(jobData);
     setSettingsStatus(settingsData);
     setDbStore(settingsData.store);
@@ -777,6 +830,95 @@ export default function Dashboard() {
       setNotice(error instanceof Error ? error.message : "Retry failed.");
     } finally {
       setRetryingAlertId(null);
+      setBusy(false);
+    }
+  }
+
+  async function startBookAssist(alert: Alert) {
+    let bookingWindow: Window | null = null;
+    if (typeof window !== "undefined") {
+      bookingWindow = window.open("", "_blank");
+      if (bookingWindow) {
+        bookingWindow.opener = null;
+      }
+    }
+
+    setBusy(true);
+    setBookingIntentBusyAlertId(alert.alert_id);
+    setNotice("");
+    try {
+      const bookingIntent = await fetchJson<BookingIntent>(
+        `/alerts/${alert.alert_id}/book-assist`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+
+      let updatedIntent = bookingIntent;
+      if (bookingWindow) {
+        bookingWindow.location.href = bookingIntent.handoff_url;
+        if (bookingIntent.status !== "user_confirmed") {
+          updatedIntent = await fetchJson<BookingIntent>(
+            `/booking-intents/${bookingIntent.booking_intent_id}/opened`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+      }
+
+      setBookingIntents((current) =>
+        upsertBookingIntent(current, updatedIntent),
+      );
+      setNotice(
+        bookingWindow
+          ? "Book Assist opened Recreation.gov. Confirm or abandon it here after checkout."
+          : "Book Assist created. Pop-up was blocked; use the handoff link on this alert.",
+      );
+      await refreshData();
+    } catch (error) {
+      if (bookingWindow) {
+        bookingWindow.close();
+      }
+      setNotice(error instanceof Error ? error.message : "Book Assist failed.");
+    } finally {
+      setBookingIntentBusyAlertId(null);
+      setBusy(false);
+    }
+  }
+
+  async function updateBookingIntentStatus(
+    bookingIntentId: string,
+    transition: "user-confirmed" | "abandoned",
+  ) {
+    setBusy(true);
+    setBookingStatusBusyId(bookingIntentId);
+    setNotice("");
+    try {
+      const bookingIntent = await fetchJson<BookingIntent>(
+        `/booking-intents/${bookingIntentId}/${transition}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+      setBookingIntents((current) =>
+        upsertBookingIntent(current, bookingIntent),
+      );
+      setNotice(
+        transition === "user-confirmed"
+          ? "Booking intent marked as user confirmed."
+          : "Booking intent marked as abandoned.",
+      );
+      await refreshData();
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : "Booking status update failed.",
+      );
+    } finally {
+      setBookingStatusBusyId(null);
       setBusy(false);
     }
   }
@@ -2066,65 +2208,145 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="alertList">
-          {filteredAlerts.map((alert) => (
-            <article className="alertItem" key={alert.alert_id}>
-              <div>
-                <strong>
-                  {alert.campground_name ?? alert.park_name}
-                  {alert.site ? ` · site ${alert.site}` : ""}
-                </strong>
-                <p>{alert.message}</p>
-                <div className="alertMeta">
-                  <span>{new Date(alert.created_at).toLocaleString()}</span>
-                  {alert.available_date && alert.available_end_date ? (
-                    <span>
-                      {alert.available_date} to {alert.available_end_date}
-                    </span>
-                  ) : null}
-                  {alert.nights ? (
-                    <span>
-                      {alert.nights} night{alert.nights === 1 ? "" : "s"}
-                    </span>
-                  ) : null}
-                  {alert.site_type ? <span>{alert.site_type}</span> : null}
-                </div>
-                <div className="deliveries">
-                  {alert.deliveries.length ? (
-                    alert.deliveries.map((delivery) => (
-                      <span
-                        className={`delivery ${delivery.status}`}
-                        key={`${alert.alert_id}-${delivery.channel}`}
-                        title={delivery.detail}
-                      >
-                        {delivery.channel}: {delivery.status}
+          {filteredAlerts.map((alert) => {
+            const bookingIntent = bookingIntentByAlertId[alert.alert_id];
+            return (
+              <article className="alertItem" key={alert.alert_id}>
+                <div>
+                  <strong>
+                    {alert.campground_name ?? alert.park_name}
+                    {alert.site ? ` · site ${alert.site}` : ""}
+                  </strong>
+                  <p>{alert.message}</p>
+                  <div className="alertMeta">
+                    <span>{new Date(alert.created_at).toLocaleString()}</span>
+                    {alert.available_date && alert.available_end_date ? (
+                      <span>
+                        {alert.available_date} to {alert.available_end_date}
                       </span>
-                    ))
-                  ) : (
-                    <span className="delivery not_configured">no delivery record</span>
-                  )}
+                    ) : null}
+                    {alert.nights ? (
+                      <span>
+                        {alert.nights} night{alert.nights === 1 ? "" : "s"}
+                      </span>
+                    ) : null}
+                    {alert.site_type ? <span>{alert.site_type}</span> : null}
+                    {bookingIntent ? (
+                      <span className={`bookingStatus ${bookingIntent.status}`}>
+                        Book Assist: {formatBookingStatus(bookingIntent.status)}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="deliveries">
+                    {alert.deliveries.length ? (
+                      alert.deliveries.map((delivery) => (
+                        <span
+                          className={`delivery ${delivery.status}`}
+                          key={`${alert.alert_id}-${delivery.channel}`}
+                          title={delivery.detail}
+                        >
+                          {delivery.channel}: {delivery.status}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="delivery not_configured">
+                        no delivery record
+                      </span>
+                    )}
+                  </div>
+                  {bookingIntent ? (
+                    <div className="bookingIntent">
+                      <p>{bookingIntent.note}</p>
+                      <div className="bookingIntentMeta">
+                        <span>Created {formatDateTimeWithSeconds(bookingIntent.created_at)}</span>
+                        <span>Updated {formatDateTimeWithSeconds(bookingIntent.updated_at)}</span>
+                        {bookingIntent.site ? <span>Site {bookingIntent.site}</span> : null}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
-              </div>
-              <div className="alertActions">
-                {hasRetryableDelivery(alert) ? (
+                <div className="alertActions">
                   <button
                     className="iconButton"
-                    disabled={busy || retryingAlertId === alert.alert_id}
-                    onClick={() => retryAlertDelivery(alert.alert_id)}
-                    title="Retry failed delivery"
+                    disabled={busy || bookingIntentBusyAlertId === alert.alert_id}
+                    onClick={() => startBookAssist(alert)}
+                    title="Create a booking handoff and open Recreation.gov"
                     type="button"
                   >
-                    <RefreshCw size={16} />
+                    <ExternalLink size={16} />
                     <span>
-                      {retryingAlertId === alert.alert_id ? "Retrying" : "Retry"}
+                      {bookingIntentBusyAlertId === alert.alert_id
+                        ? "Opening"
+                        : "Book Assist"}
                     </span>
                   </button>
-                ) : null}
-                <a href={alert.reservation_url} target="_blank" rel="noreferrer">
-                  Open
-                </a>
-              </div>
-            </article>
-          ))}
+                  {bookingIntent ? (
+                    <a
+                      href={bookingIntent.handoff_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Handoff
+                    </a>
+                  ) : null}
+                  {bookingIntent &&
+                  bookingIntent.status !== "user_confirmed" ? (
+                    <button
+                      className="iconButton"
+                      disabled={busy || bookingStatusBusyId === bookingIntent.booking_intent_id}
+                      onClick={() =>
+                        updateBookingIntentStatus(
+                          bookingIntent.booking_intent_id,
+                          "user-confirmed",
+                        )
+                      }
+                      title="Mark this handoff as booked by the user"
+                      type="button"
+                    >
+                      <CheckCircle2 size={16} />
+                      <span>Booked</span>
+                    </button>
+                  ) : null}
+                  {bookingIntent &&
+                  bookingIntent.status !== "abandoned" &&
+                  bookingIntent.status !== "user_confirmed" ? (
+                    <button
+                      className="iconButton"
+                      disabled={busy || bookingStatusBusyId === bookingIntent.booking_intent_id}
+                      onClick={() =>
+                        updateBookingIntentStatus(
+                          bookingIntent.booking_intent_id,
+                          "abandoned",
+                        )
+                      }
+                      title="Mark this handoff as abandoned"
+                      type="button"
+                    >
+                      <X size={16} />
+                      <span>Abandon</span>
+                    </button>
+                  ) : null}
+                  {hasRetryableDelivery(alert) ? (
+                    <button
+                      className="iconButton"
+                      disabled={busy || retryingAlertId === alert.alert_id}
+                      onClick={() => retryAlertDelivery(alert.alert_id)}
+                      title="Retry failed delivery"
+                      type="button"
+                    >
+                      <RefreshCw size={16} />
+                      <span>
+                        {retryingAlertId === alert.alert_id ? "Retrying" : "Retry"}
+                      </span>
+                    </button>
+                  ) : null}
+                  <a href={alert.reservation_url} target="_blank" rel="noreferrer">
+                    Open
+                  </a>
+                </div>
+              </article>
+            );
+          })}
           {!filteredAlerts.length ? (
             <p className="empty">No alerts for the selected watches.</p>
           ) : null}
@@ -2323,6 +2545,23 @@ function hasRetryableDelivery(alert: Alert) {
   }
 
   return alert.deliveries.some(isFailedDelivery);
+}
+
+function upsertBookingIntent(
+  current: BookingIntent[],
+  bookingIntent: BookingIntent,
+) {
+  const withoutIntent = current.filter(
+    (intent) => intent.booking_intent_id !== bookingIntent.booking_intent_id,
+  );
+  return [bookingIntent, ...withoutIntent];
+}
+
+function formatBookingStatus(status: BookingIntentStatus) {
+  if (status === "user_confirmed") {
+    return "user confirmed";
+  }
+  return status;
 }
 
 function alertMatchesDeliveryFilter(

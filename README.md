@@ -40,9 +40,10 @@ The current product scope focuses on Recreation.gov campground inventory. The ar
 - Surface watch analytics for hottest campgrounds and latest openings.
 - Log every availability check with success/failure, result counts, and top match summaries.
 - Recommend exact matches, same-park campground alternatives, and flexible-date fallbacks.
+- Create Book Assist handoffs from alerts and track `created`, `opened`, `user_confirmed`, and `abandoned` booking intent states.
 - Protect the deployed dashboard with a password gate and shared backend API token.
 - Provide a public read-only demo dashboard with sample data at `/demo`.
-- Persist watches, alerts, dedupe keys, and check logs in Postgres.
+- Persist watches, alerts, dedupe keys, check logs, and booking intents in Postgres.
 
 ## Screenshots
 
@@ -76,6 +77,7 @@ flowchart TD
     Preference["Preference Agent"]
     Decision["Decision / Ranking Agent"]
     Execution["Execution Agent"]
+    BookAssist["Book Assist Handoff"]
     Logs["Check Logs"]
     Recreation["Recreation.gov"]
     Scheduler["APScheduler"]
@@ -99,6 +101,8 @@ flowchart TD
     Agent --> Logs
     Execution --> Email
     Execution --> SMS
+    Execution --> BookAssist
+    BookAssist --> Recreation
 ```
 
 ## Tech Stack
@@ -325,8 +329,9 @@ It uses static sample data and keeps real backend calls, watches, and notificati
 - Alert deduplication prevents repeated notifications for the same campsite/date opening.
 - Check logs record each scheduler/check-now attempt for auditability and debugging.
 - Strategy recommendations turn the monitor into a decision engine with exact, same-park, and flexible-date alternatives.
+- Book Assist opens a Recreation.gov handoff URL for the matching campground and dates while keeping checkout under user control.
 - Delivery records track email/SMS success and support retry for failed channels.
-- Auto-booking is intentionally not implemented; the product alerts users without completing purchases.
+- Full auto-booking is intentionally not implemented; the product assists users without completing purchases or payments.
 
 ## Demo Flow
 
@@ -346,7 +351,8 @@ For a portfolio recording or live walkthrough, use the full script in [docs/demo
 12. Open next-available dates to show fallback inventory discovery.
 13. Load strategy recommendations to show exact, same-park, and flexible-date alternatives.
 14. Review check history to prove the scheduler is logging each availability attempt.
-15. Pause, resume, edit, or delete a group to demonstrate operational controls.
+15. Use Book Assist on an alert to open the safe Recreation.gov handoff and track the intent status.
+16. Pause, resume, edit, or delete a group to demonstrate operational controls.
 
 ## API Reference
 
@@ -367,6 +373,11 @@ For a portfolio recording or live walkthrough, use the full script in [docs/demo
 | `GET` | `/watches/{watch_id}/recommendations` | Generate exact, same-park, and flexible-date strategy recommendations. |
 | `GET` | `/alerts` | List generated alerts, optionally filtered by watch. |
 | `POST` | `/alerts/{alert_id}/retry-delivery` | Retry failed or missing alert deliveries. |
+| `POST` | `/alerts/{alert_id}/book-assist` | Create or reuse a human-confirmed booking handoff intent for an alert. |
+| `GET` | `/booking-intents` | List booking handoff intents, optionally filtered by alert or watch. |
+| `POST` | `/booking-intents/{booking_intent_id}/opened` | Mark a booking handoff as opened. |
+| `POST` | `/booking-intents/{booking_intent_id}/user-confirmed` | Mark a booking handoff as completed by the user. |
+| `POST` | `/booking-intents/{booking_intent_id}/abandoned` | Mark a booking handoff as abandoned. |
 | `GET` | `/check-logs` | List recent availability check attempts. |
 | `GET` | `/scheduler/jobs` | Inspect active polling jobs and next run times. |
 | `GET` | `/settings/status` | Show safe runtime config and alert integration status. |
@@ -414,6 +425,7 @@ On startup, the backend creates these Postgres tables when needed:
 - `reservation_alerts`
 - `reservation_alert_keys`
 - `reservation_check_logs`
+- `booking_intents`
 
 Alert deduplication uses:
 
@@ -426,7 +438,7 @@ This prevents repeated notifications for the same campsite opening while still a
 ## Current Scope And Limitations
 
 - Recreation.gov campground availability is supported.
-- Auto-booking is intentionally not implemented.
+- Full auto-booking is intentionally not implemented; Book Assist keeps checkout and payment in the user's hands.
 - Resend and Twilio require valid provider credentials.
 - Highly competitive dates may return no availability; that still confirms the live source was checked.
 - Redis is present in configuration for future queue work, but APScheduler currently runs the polling jobs.

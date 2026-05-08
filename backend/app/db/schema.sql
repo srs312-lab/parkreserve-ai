@@ -38,3 +38,23 @@ CREATE TABLE IF NOT EXISTS reservation_check_logs (
     error_message TEXT,
     top_match_summary TEXT
 );
+
+CREATE TABLE IF NOT EXISTS booking_intents (
+    booking_intent_id TEXT PRIMARY KEY,
+    alert_id TEXT NOT NULL UNIQUE REFERENCES reservation_alerts(alert_id),
+    watch_id TEXT NOT NULL REFERENCES reservation_watches(watch_id),
+    status TEXT NOT NULL,
+    handoff_url TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    park_name TEXT NOT NULL,
+    campground_name TEXT,
+    facility_id TEXT,
+    campsite_id TEXT,
+    site TEXT,
+    available_date DATE,
+    available_end_date DATE,
+    nights INTEGER,
+    site_type TEXT,
+    note TEXT NOT NULL
+);

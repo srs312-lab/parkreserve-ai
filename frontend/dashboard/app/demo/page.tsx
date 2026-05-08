@@ -2,8 +2,10 @@ import {
   Activity,
   Bell,
   CalendarDays,
+  CheckCircle2,
   Compass,
   Database,
+  ExternalLink,
   Lock,
   Pause,
   Pencil,
@@ -14,6 +16,7 @@ import {
   ShieldCheck,
   TrendingUp,
   Trash2,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -71,6 +74,7 @@ const demoAlerts = [
     deliveries: ["email: sent", "sms: sent"],
     message:
       "Matching opening found for 1 night inside the selected Yosemite date window.",
+    bookAssistStatus: "opened",
     site: "Site 042",
     window: "2026-06-11 to 2026-06-12",
   },
@@ -80,6 +84,7 @@ const demoAlerts = [
     deliveries: ["email: sent", "sms: sent"],
     message:
       "Two-night opening found for a tent-friendly site in the monitored range.",
+    bookAssistStatus: "user confirmed",
     site: "Site 018",
     window: "2026-06-10 to 2026-06-12",
   },
@@ -351,6 +356,9 @@ export default function DemoDashboard() {
                   <span>{alert.window}</span>
                   <span>1+ night</span>
                   <span>standard nonelectric</span>
+                  <span className="bookingStatus opened">
+                    Book Assist: {alert.bookAssistStatus}
+                  </span>
                 </div>
                 <div className="deliveries">
                   {alert.deliveries.map((delivery) => (
@@ -359,8 +367,31 @@ export default function DemoDashboard() {
                     </span>
                   ))}
                 </div>
+                <div className="bookingIntent">
+                  <p>
+                    Book Assist opens Recreation.gov with the matching campground
+                    and dates. The user completes checkout manually.
+                  </p>
+                  <div className="bookingIntentMeta">
+                    <span>Created May 6, 2:14:22 PM</span>
+                    <span>Updated May 6, 2:14:35 PM</span>
+                    <span>{alert.site}</span>
+                  </div>
+                </div>
               </div>
               <div className="alertActions">
+                <button className="iconButton" disabled type="button">
+                  <ExternalLink size={16} />
+                  <span>Book Assist</span>
+                </button>
+                <button className="iconButton" disabled type="button">
+                  <CheckCircle2 size={16} />
+                  <span>Booked</span>
+                </button>
+                <button className="iconButton" disabled type="button">
+                  <X size={16} />
+                  <span>Abandon</span>
+                </button>
                 <button className="iconButton" disabled type="button">
                   <RefreshCw size={16} />
                   <span>Retry</span>

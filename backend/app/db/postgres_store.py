@@ -10,6 +10,8 @@ from app.db.memory_store import MemoryStore
 from app.schemas.reservations import (
     Alert,
     AvailabilityResult,
+    BookingIntent,
+    BookingIntentStatus,
     NotificationDelivery,
     ReservationCheckLog,
     UserPreferences,
@@ -87,6 +89,30 @@ class PostgresStore(MemoryStore):
                     alert_created BOOLEAN NOT NULL DEFAULT FALSE,
                     error_message TEXT,
                     top_match_summary TEXT
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS booking_intents (
+                    booking_intent_id TEXT PRIMARY KEY,
+                    alert_id TEXT NOT NULL UNIQUE
+                        REFERENCES reservation_alerts(alert_id),
+                    watch_id TEXT NOT NULL REFERENCES reservation_watches(watch_id),
+                    status TEXT NOT NULL,
+                    handoff_url TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL,
+                    park_name TEXT NOT NULL,
+                    campground_name TEXT,
+                    facility_id TEXT,
+                    campsite_id TEXT,
+                    site TEXT,
+                    available_date DATE,
+                    available_end_date DATE,
+                    nights INTEGER,
+                    site_type TEXT,
+                    note TEXT NOT NULL
                 )
                 """
             )
@@ -187,11 +213,15 @@ class PostgresStore(MemoryStore):
                 (watch_id,),
             )
             connection.execute(
-                "DELETE FROM reservation_alerts WHERE watch_id = %s",
+                "DELETE FROM booking_intents WHERE watch_id = %s",
                 (watch_id,),
             )
             connection.execute(
                 "DELETE FROM reservation_check_logs WHERE watch_id = %s",
+                (watch_id,),
+            )
+            connection.execute(
+                "DELETE FROM reservation_alerts WHERE watch_id = %s",
                 (watch_id,),
             )
             connection.execute(
@@ -447,6 +477,230 @@ class PostgresStore(MemoryStore):
             ).fetchall()
 
         return [ReservationCheckLog.model_validate(row) for row in rows]
+
+    def create_booking_intent(self, booking_intent: BookingIntent) -> BookingIntent:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                INSERT INTO booking_intents (
+                    booking_intent_id,
+                    alert_id,
+                    watch_id,
+                    status,
+                    handoff_url,
+                    created_at,
+                    updated_at,
+                    park_name,
+                    campground_name,
+                    facility_id,
+                    campsite_id,
+                    site,
+                    available_date,
+                    available_end_date,
+                    nights,
+                    site_type,
+                    note
+                )
+                VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                ON CONFLICT (alert_id) DO UPDATE
+                    SET updated_at = booking_intents.updated_at
+                RETURNING
+                    booking_intent_id,
+                    alert_id,
+                    watch_id,
+                    status,
+                    handoff_url,
+                    created_at,
+                    updated_at,
+                    park_name,
+                    campground_name,
+                    facility_id,
+                    campsite_id,
+                    site,
+                    available_date,
+                    available_end_date,
+                    nights,
+                    site_type,
+                    note
+                """,
+                (
+                    booking_intent.booking_intent_id,
+                    booking_intent.alert_id,
+                    booking_intent.watch_id,
+                    booking_intent.status,
+                    booking_intent.handoff_url,
+                    booking_intent.created_at,
+                    booking_intent.updated_at,
+                    booking_intent.park_name,
+                    booking_intent.campground_name,
+                    booking_intent.facility_id,
+                    booking_intent.campsite_id,
+                    booking_intent.site,
+                    booking_intent.available_date,
+                    booking_intent.available_end_date,
+                    booking_intent.nights,
+                    booking_intent.site_type,
+                    booking_intent.note,
+                ),
+            ).fetchone()
+            connection.commit()
+
+        return BookingIntent.model_validate(row)
+
+    def get_booking_intent(self, booking_intent_id: str) -> Optional[BookingIntent]:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    booking_intent_id,
+                    alert_id,
+                    watch_id,
+                    status,
+                    handoff_url,
+                    created_at,
+                    updated_at,
+                    park_name,
+                    campground_name,
+                    facility_id,
+                    campsite_id,
+                    site,
+                    available_date,
+                    available_end_date,
+                    nights,
+                    site_type,
+                    note
+                FROM booking_intents
+                WHERE booking_intent_id = %s
+                """,
+                (booking_intent_id,),
+            ).fetchone()
+
+        if row is None:
+            return None
+        return BookingIntent.model_validate(row)
+
+    def get_booking_intent_by_alert(self, alert_id: str) -> Optional[BookingIntent]:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    booking_intent_id,
+                    alert_id,
+                    watch_id,
+                    status,
+                    handoff_url,
+                    created_at,
+                    updated_at,
+                    park_name,
+                    campground_name,
+                    facility_id,
+                    campsite_id,
+                    site,
+                    available_date,
+                    available_end_date,
+                    nights,
+                    site_type,
+                    note
+                FROM booking_intents
+                WHERE alert_id = %s
+                """,
+                (alert_id,),
+            ).fetchone()
+
+        if row is None:
+            return None
+        return BookingIntent.model_validate(row)
+
+    def update_booking_intent_status(
+        self,
+        booking_intent_id: str,
+        status: BookingIntentStatus,
+        updated_at: datetime,
+    ) -> BookingIntent:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                UPDATE booking_intents
+                SET status = %s, updated_at = %s
+                WHERE booking_intent_id = %s
+                RETURNING
+                    booking_intent_id,
+                    alert_id,
+                    watch_id,
+                    status,
+                    handoff_url,
+                    created_at,
+                    updated_at,
+                    park_name,
+                    campground_name,
+                    facility_id,
+                    campsite_id,
+                    site,
+                    available_date,
+                    available_end_date,
+                    nights,
+                    site_type,
+                    note
+                """,
+                (status, updated_at, booking_intent_id),
+            ).fetchone()
+            connection.commit()
+
+        if row is None:
+            raise KeyError(booking_intent_id)
+        return BookingIntent.model_validate(row)
+
+    def list_booking_intents(
+        self,
+        alert_id: Optional[str] = None,
+        watch_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> list[BookingIntent]:
+        filters = []
+        params: list[object] = []
+        if alert_id is not None:
+            filters.append("alert_id = %s")
+            params.append(alert_id)
+        if watch_id is not None:
+            filters.append("watch_id = %s")
+            params.append(watch_id)
+
+        where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+        params.append(limit)
+
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT
+                    booking_intent_id,
+                    alert_id,
+                    watch_id,
+                    status,
+                    handoff_url,
+                    created_at,
+                    updated_at,
+                    park_name,
+                    campground_name,
+                    facility_id,
+                    campsite_id,
+                    site,
+                    available_date,
+                    available_end_date,
+                    nights,
+                    site_type,
+                    note
+                FROM booking_intents
+                {where_clause}
+                ORDER BY updated_at DESC
+                LIMIT %s
+                """,
+                tuple(params),
+            ).fetchall()
+
+        return [BookingIntent.model_validate(row) for row in rows]
 
     def has_alerted(self, watch_id: str, result: AvailabilityResult) -> bool:
         alert_key = self._alert_key(watch_id, result)

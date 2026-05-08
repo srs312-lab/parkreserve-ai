@@ -5,6 +5,8 @@ from typing import Optional
 from app.schemas.reservations import (
     Alert,
     AvailabilityResult,
+    BookingIntent,
+    BookingIntentStatus,
     NotificationDelivery,
     ReservationCheckLog,
     UserPreferences,
@@ -18,6 +20,7 @@ class MemoryStore:
         self.alerts: list[Alert] = []
         self.alert_keys: set[str] = set()
         self.check_logs: list[ReservationCheckLog] = []
+        self.booking_intents: list[BookingIntent] = []
 
     def create_watch(self, preferences: UserPreferences) -> Watch:
         watch = Watch(
@@ -49,6 +52,9 @@ class MemoryStore:
     def delete_watch(self, watch_id: str) -> None:
         self.watches.pop(watch_id, None)
         self.alerts = [alert for alert in self.alerts if alert.watch_id != watch_id]
+        self.booking_intents = [
+            intent for intent in self.booking_intents if intent.watch_id != watch_id
+        ]
         self.clear_alert_keys(watch_id)
 
     def clear_alert_keys(self, watch_id: str) -> None:
@@ -107,6 +113,67 @@ class MemoryStore:
             logs = [log for log in logs if log.watch_id == watch_id]
 
         return sorted(logs, key=lambda log: log.checked_at, reverse=True)[:limit]
+
+    def create_booking_intent(self, booking_intent: BookingIntent) -> BookingIntent:
+        existing_intent = self.get_booking_intent_by_alert(booking_intent.alert_id)
+        if existing_intent is not None:
+            return existing_intent
+
+        self.booking_intents.append(booking_intent)
+        return booking_intent
+
+    def get_booking_intent(self, booking_intent_id: str) -> Optional[BookingIntent]:
+        return next(
+            (
+                intent
+                for intent in self.booking_intents
+                if intent.booking_intent_id == booking_intent_id
+            ),
+            None,
+        )
+
+    def get_booking_intent_by_alert(self, alert_id: str) -> Optional[BookingIntent]:
+        return next(
+            (intent for intent in self.booking_intents if intent.alert_id == alert_id),
+            None,
+        )
+
+    def update_booking_intent_status(
+        self,
+        booking_intent_id: str,
+        status: BookingIntentStatus,
+        updated_at: datetime,
+    ) -> BookingIntent:
+        for index, intent in enumerate(self.booking_intents):
+            if intent.booking_intent_id == booking_intent_id:
+                updated_intent = intent.model_copy(
+                    update={
+                        "status": status,
+                        "updated_at": updated_at,
+                    }
+                )
+                self.booking_intents[index] = updated_intent
+                return updated_intent
+
+        raise KeyError(booking_intent_id)
+
+    def list_booking_intents(
+        self,
+        alert_id: Optional[str] = None,
+        watch_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> list[BookingIntent]:
+        intents = self.booking_intents
+        if alert_id is not None:
+            intents = [intent for intent in intents if intent.alert_id == alert_id]
+        if watch_id is not None:
+            intents = [intent for intent in intents if intent.watch_id == watch_id]
+
+        return sorted(
+            intents,
+            key=lambda intent: intent.updated_at,
+            reverse=True,
+        )[:limit]
 
     def has_alerted(self, watch_id: str, result: AvailabilityResult) -> bool:
         return self._alert_key(watch_id, result) in self.alert_keys

@@ -23,6 +23,8 @@ from app.schemas.reservations import (
     AvailabilityResult,
     BatchWatchReservationResponse,
     BatchWatchReservationRequest,
+    BookingIntent,
+    BookingIntentStatus,
     CampgroundSearchResult,
     DuplicateWatchResponse,
     IntegrationStatus,
@@ -188,6 +190,54 @@ async def retry_alert_delivery(alert_id: str) -> Alert:
     merged_deliveries = _merge_deliveries(alert.deliveries, retried_deliveries)
 
     return store.update_alert_deliveries(alert.alert_id, merged_deliveries)
+
+
+@router.post("/alerts/{alert_id}/book-assist", response_model=BookingIntent)
+def create_book_assist_intent(alert_id: str) -> BookingIntent:
+    alert = store.get_alert(alert_id)
+    if alert is None:
+        raise HTTPException(status_code=404, detail="Alert not found.")
+
+    watch = store.get_watch(alert.watch_id)
+    if watch is None:
+        raise HTTPException(status_code=404, detail="Watch not found.")
+
+    booking_intent = agent.execution_agent.create_booking_intent(alert)
+    return store.create_booking_intent(booking_intent)
+
+
+@router.get("/booking-intents", response_model=list[BookingIntent])
+def list_booking_intents(
+    alert_id: Optional[str] = None,
+    watch_id: Optional[str] = None,
+    limit: int = 100,
+) -> list[BookingIntent]:
+    return store.list_booking_intents(
+        alert_id=alert_id,
+        watch_id=watch_id,
+        limit=max(1, min(limit, 250)),
+    )
+
+
+@router.post("/booking-intents/{booking_intent_id}/opened", response_model=BookingIntent)
+def mark_booking_intent_opened(booking_intent_id: str) -> BookingIntent:
+    return _update_booking_intent_status(booking_intent_id, "opened")
+
+
+@router.post(
+    "/booking-intents/{booking_intent_id}/user-confirmed",
+    response_model=BookingIntent,
+)
+def mark_booking_intent_user_confirmed(booking_intent_id: str) -> BookingIntent:
+    return _update_booking_intent_status(booking_intent_id, "user_confirmed")
+
+
+@router.post(
+    "/booking-intents/{booking_intent_id}/abandoned",
+    response_model=BookingIntent,
+)
+def mark_booking_intent_abandoned(booking_intent_id: str) -> BookingIntent:
+    return _update_booking_intent_status(booking_intent_id, "abandoned")
 
 
 @router.post("/alerts/test", response_model=TestAlertResponse)
@@ -577,6 +627,24 @@ def _merge_deliveries(
         for channel in ("email", "sms")
         if (delivery := deliveries_by_channel.get(channel)) is not None
     ]
+
+
+def _update_booking_intent_status(
+    booking_intent_id: str,
+    status: BookingIntentStatus,
+) -> BookingIntent:
+    booking_intent = store.get_booking_intent(booking_intent_id)
+    if booking_intent is None:
+        raise HTTPException(status_code=404, detail="Booking intent not found.")
+
+    if booking_intent.status == "user_confirmed" and status == "opened":
+        return booking_intent
+
+    return store.update_booking_intent_status(
+        booking_intent_id,
+        status,
+        datetime.now(timezone.utc),
+    )
 
 
 def _sms_status() -> IntegrationStatus:

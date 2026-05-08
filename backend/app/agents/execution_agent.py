@@ -1,11 +1,14 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 from uuid import uuid4
 
+from app.config.settings import settings
 from app.notifier.email import EmailNotifier
 from app.notifier.sms import SmsNotifier
 from app.schemas.reservations import (
     Alert,
     AvailabilityResult,
+    BookingIntent,
     NotificationDelivery,
     Watch,
 )
@@ -37,6 +40,32 @@ class ExecutionAgent:
             available_end_date=result.available_end_date,
             nights=result.nights,
             site_type=result.site_type,
+        )
+
+    def create_booking_intent(self, alert: Alert) -> BookingIntent:
+        created_at = datetime.now(timezone.utc)
+        return BookingIntent(
+            booking_intent_id=str(uuid4()),
+            alert_id=alert.alert_id,
+            watch_id=alert.watch_id,
+            status="created",
+            handoff_url=_booking_handoff_url(alert),
+            created_at=created_at,
+            updated_at=created_at,
+            park_name=alert.park_name,
+            campground_name=alert.campground_name,
+            facility_id=alert.facility_id,
+            campsite_id=alert.campsite_id,
+            site=alert.site,
+            available_date=alert.available_date,
+            available_end_date=alert.available_end_date,
+            nights=alert.nights,
+            site_type=alert.site_type,
+            note=(
+                "Book Assist opens Recreation.gov with the matching campground "
+                "and dates. The user must verify availability, rules, price, "
+                "and complete checkout manually."
+            ),
         )
 
     async def send_notifications(self, watch: Watch, alert: Alert) -> list[NotificationDelivery]:
@@ -90,3 +119,21 @@ class ExecutionAgent:
             )
 
         return deliveries
+
+
+def _booking_handoff_url(alert: Alert) -> str:
+    base_url = settings.recreation_gov_base_url.rstrip("/")
+    if not alert.facility_id:
+        return alert.reservation_url or base_url
+
+    params: dict[str, str] = {}
+    if alert.available_date:
+        params["checkin"] = alert.available_date.isoformat()
+    if alert.available_end_date:
+        checkout_date = alert.available_end_date + timedelta(days=1)
+        params["checkout"] = checkout_date.isoformat()
+    if alert.campsite_id:
+        params["campsite_id"] = alert.campsite_id
+
+    query_string = f"?{urlencode(params)}" if params else ""
+    return f"{base_url}/camping/campgrounds/{alert.facility_id}{query_string}"

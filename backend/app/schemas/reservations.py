@@ -9,6 +9,12 @@ NotificationStatus = Literal["sent", "not_configured", "failed"]
 WatchPriority = Literal["high", "normal", "low"]
 CheckStatus = Literal["success", "failed"]
 RecommendationType = Literal["exact_match", "same_park", "flexible_date"]
+BookingIntentStatus = Literal[
+    "created",
+    "opened",
+    "user_confirmed",
+    "abandoned",
+]
 
 
 class WatchReservationRequest(BaseModel):
@@ -267,6 +273,26 @@ class Alert(BaseModel):
     nights: Optional[int] = None
     site_type: Optional[str] = None
     deliveries: list[NotificationDelivery] = Field(default_factory=list)
+
+
+class BookingIntent(BaseModel):
+    booking_intent_id: str
+    alert_id: str
+    watch_id: str
+    status: BookingIntentStatus
+    handoff_url: str
+    created_at: datetime
+    updated_at: datetime
+    park_name: str
+    campground_name: Optional[str] = None
+    facility_id: Optional[str] = None
+    campsite_id: Optional[str] = None
+    site: Optional[str] = None
+    available_date: Optional[date] = None
+    available_end_date: Optional[date] = None
+    nights: Optional[int] = None
+    site_type: Optional[str] = None
+    note: str
 
 
 class ReservationCheckLog(BaseModel):

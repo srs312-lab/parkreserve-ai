@@ -937,6 +937,56 @@ button:disabled {
   color: var(--accent-2);
 }
 
+.bookingStatus {
+  background: #e9ebf4;
+  color: #4d5c89;
+}
+
+.bookingStatus.opened {
+  background: #dff1e7;
+  color: var(--accent);
+}
+
+.bookingStatus.user_confirmed {
+  background: #dff1e7;
+  color: var(--accent);
+}
+
+.bookingStatus.abandoned {
+  background: #f4e5dc;
+  color: var(--accent-2);
+}
+
+.bookingIntent {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfb;
+}
+
+.bookingIntent p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.bookingIntentMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.bookingIntentMeta span {
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .modalBackdrop {
   position: fixed;
   z-index: 50;
